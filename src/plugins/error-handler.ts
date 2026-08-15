@@ -42,14 +42,28 @@ const errorHandlerPlugin: FastifyPluginCallback = (fastify, _options, done) => {
 
     if (error instanceof AppError) {
       if (error.statusCode >= 500) {
-        request.log.error({ err: error }, 'Application request failed');
+        request.log.error(
+          {
+            errorCode: error.code,
+            errorName: error.name,
+            statusCode: error.statusCode,
+          },
+          'Application request failed',
+        );
+        return reply.status(error.statusCode).send(
+          body(
+            ErrorCode.INTERNAL_ERROR,
+            'Internal server error',
+            request.id,
+          ),
+        );
       }
       return reply
         .status(error.statusCode)
         .send(body(error.code, error.message, request.id));
     }
 
-    request.log.error({ err: error }, 'Unhandled request failure');
+    request.log.error({ errorName: error.name }, 'Unhandled request failure');
     return reply.status(500).send(
       body(ErrorCode.INTERNAL_ERROR, 'Internal server error', request.id),
     );
