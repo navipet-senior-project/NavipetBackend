@@ -11,10 +11,13 @@ import authPlugin, {
   SupabaseJwtVerifier,
   type JwtVerifier,
 } from './plugins/auth.js';
+import corsPlugin from './plugins/cors.js';
 import errorHandlerPlugin from './plugins/error-handler.js';
+import rateLimitPlugin from './plugins/rate-limit.js';
 import supabasePlugin, {
   type SupabaseResources,
 } from './plugins/supabase.js';
+import swaggerPlugin from './plugins/swagger.js';
 
 export interface BuildAppOptions {
   env?: Environment;
@@ -49,13 +52,18 @@ export async function buildApp(
 
   app.setValidatorCompiler(TypeBoxValidatorCompiler);
   app.decorate('config', config);
-  await app.register(errorHandlerPlugin);
-  await app.register(supabasePlugin, {
+  const supabaseOptions = {
     ...(options.supabaseResources === undefined
       ? {}
       : { resources: options.supabaseResources }),
-  });
-  await app.register(authPlugin, {
+  };
+
+  await app.register(errorHandlerPlugin);
+  await app.register(corsPlugin);
+  await app.register(rateLimitPlugin);
+  await app.register(swaggerPlugin);
+  await app.register(supabasePlugin, supabaseOptions);
+  const authOptions = {
     verifier:
       options.authVerifier ??
       new SupabaseJwtVerifier(
@@ -63,7 +71,8 @@ export async function buildApp(
         config.SUPABASE_JWT_ISSUER,
         config.SUPABASE_JWT_AUDIENCE,
       ),
-  });
+  };
+  await app.register(authPlugin, authOptions);
   await app.register(healthRoutes);
 
   return app;

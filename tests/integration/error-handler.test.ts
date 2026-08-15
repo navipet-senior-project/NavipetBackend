@@ -181,3 +181,66 @@ describe('error handling', () => {
     });
   });
 });
+
+describe('HTTP hardening', () => {
+  let app: FastifyInstance | undefined;
+
+  afterEach(async () => {
+    await app?.close();
+  });
+
+  it('emits CORS headers only for an allowed browser origin', async () => {
+    app = await buildTestApp({
+      CORS_ORIGINS: ['https://allowed.example.com'],
+    });
+
+    const allowed = await app.inject({
+      method: 'GET',
+      url: '/health',
+      headers: { origin: 'https://allowed.example.com' },
+    });
+    const denied = await app.inject({
+      method: 'GET',
+      url: '/health',
+      headers: { origin: 'https://denied.example.com' },
+    });
+
+    expect(allowed.headers['access-control-allow-origin']).toBe(
+      'https://allowed.example.com',
+    );
+    expect(denied.headers['access-control-allow-origin']).toBeUndefined();
+  });
+
+  it('returns the standard envelope when the rate limit is exceeded', async () => {
+    app = await buildTestApp({ RATE_LIMIT_MAX: 1 });
+    app.get('/__test/limited', () => ({ ok: true }));
+
+    const first = await app.inject({ method: 'GET', url: '/__test/limited' });
+    const second = await app.inject({ method: 'GET', url: '/__test/limited' });
+
+    expect(first.statusCode).toBe(200);
+    expect(second.statusCode).toBe(429);
+    expect(second.json()).toEqual({
+      error: {
+        code: 'RATE_LIMITED',
+        message: 'Too many requests',
+        requestId: anyString,
+      },
+    });
+  });
+
+  it('exempts health endpoints from rate limiting', async () => {
+    app = await buildTestApp({ RATE_LIMIT_MAX: 1 });
+
+    const responses = await Promise.all([
+      app.inject({ method: 'GET', url: '/health' }),
+      app.inject({ method: 'GET', url: '/health' }),
+      app.inject({ method: 'GET', url: '/api/v1/health' }),
+      app.inject({ method: 'GET', url: '/api/v1/health' }),
+    ]);
+
+    expect(responses.map((response) => response.statusCode)).toEqual([
+      200, 200, 200, 200,
+    ]);
+  });
+});
