@@ -16,6 +16,12 @@ function body(code: string, message: string, requestId: string): ErrorBody {
   return { error: { code, message, requestId } };
 }
 
+const invalidRequestParserCodes = new Set([
+  'FST_ERR_CTP_EMPTY_JSON_BODY',
+  'FST_ERR_CTP_INVALID_CONTENT_LENGTH',
+  'FST_ERR_CTP_INVALID_JSON_BODY',
+]);
+
 const errorHandlerPlugin: FastifyPluginCallback = (fastify, _options, done) => {
   fastify.setNotFoundHandler((request, reply) => {
     return reply
@@ -28,6 +34,22 @@ const errorHandlerPlugin: FastifyPluginCallback = (fastify, _options, done) => {
       return reply
         .status(400)
         .send(body(ErrorCode.VALIDATION_ERROR, 'Invalid request', request.id));
+    }
+
+    if (invalidRequestParserCodes.has(error.code)) {
+      return reply
+        .status(400)
+        .send(body(ErrorCode.VALIDATION_ERROR, 'Invalid request', request.id));
+    }
+
+    if (error.code === 'FST_ERR_CTP_INVALID_MEDIA_TYPE') {
+      return reply.status(415).send(
+        body(
+          ErrorCode.VALIDATION_ERROR,
+          'Unsupported media type',
+          request.id,
+        ),
+      );
     }
 
     if (error.code === 'FST_ERR_CTP_BODY_TOO_LARGE') {

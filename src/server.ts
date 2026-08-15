@@ -32,8 +32,8 @@ export function registerShutdownHandlers(
       app.log.info({ signal }, 'Shutting down');
       try {
         await app.close();
-      } catch (error) {
-        app.log.error({ err: error, signal }, 'Graceful shutdown failed');
+      } catch {
+        app.log.error({ signal }, 'Graceful shutdown failed');
         process.exitCode = 1;
       }
     });

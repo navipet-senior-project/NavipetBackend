@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { FastifyInstance } from 'fastify';
 
+import { AppError } from '../../src/common/errors/app-error.js';
 import { ErrorCode } from '../../src/common/errors/error-codes.js';
 import {
   SupabaseJwtVerifier,
@@ -101,6 +102,43 @@ describe('authentication guard', () => {
       user: { id: '22222222-2222-4222-8222-222222222222' },
     });
   });
+
+  it('normalizes a gateway AppError to a safe unauthorized response', async () => {
+    const secretMessage = 'custom gateway database detail';
+    const verifier = new SupabaseJwtVerifier(
+      {
+        getClaims: vi.fn().mockRejectedValue(
+          new AppError({
+            code: ErrorCode.DATABASE_ERROR,
+            statusCode: 503,
+            message: secretMessage,
+            cause: new Error('custom gateway cause'),
+          }),
+        ),
+      },
+      TEST_ENV.SUPABASE_JWT_ISSUER,
+      TEST_ENV.SUPABASE_JWT_AUDIENCE,
+    );
+    app = await protectedApp(verifier);
+
+    const response = await app.inject({
+      method: 'GET',
+      url: '/__test/protected',
+      headers: { authorization: 'Bearer gateway-failure-token' },
+    });
+
+    expect(response.statusCode).toBe(401);
+    expect(response.json()).toEqual({
+      error: {
+        code: 'UNAUTHORIZED',
+        message: 'Authentication required',
+        requestId: anyString,
+      },
+    });
+    expect(response.body).not.toContain(secretMessage);
+    expect(response.body).not.toContain('custom gateway cause');
+    expect(response.body).not.toContain('gateway-failure-token');
+  });
 });
 
 describe('SupabaseJwtVerifier', () => {
@@ -123,6 +161,25 @@ describe('SupabaseJwtVerifier', () => {
     await expect(verifier.verify('token')).resolves.toEqual({
       id: validClaims.sub,
       email: validClaims.email,
+    });
+  });
+
+  it('accepts anonymous claims with a valid array audience', async () => {
+    const anonymousClaims = {
+      sub: '44444444-4444-4444-8444-444444444444',
+      iss: TEST_ENV.SUPABASE_JWT_ISSUER,
+      aud: ['anon', TEST_ENV.SUPABASE_JWT_AUDIENCE],
+      exp: 2_000_000_000,
+    };
+    const verifier = new SupabaseJwtVerifier(
+      { getClaims: vi.fn().mockResolvedValue(anonymousClaims) },
+      TEST_ENV.SUPABASE_JWT_ISSUER,
+      TEST_ENV.SUPABASE_JWT_AUDIENCE,
+      () => 1_900_000_000_000,
+    );
+
+    await expect(verifier.verify('anonymous-token')).resolves.toEqual({
+      id: anonymousClaims.sub,
     });
   });
 
@@ -179,6 +236,28 @@ describe('Supabase resource boundary', () => {
     expect(withAdmin.adminClient).not.toBeNull();
     expect(withoutAdmin.forAccessToken('user-token')).not.toBe(
       withoutAdmin.publicClient,
+    );
+  });
+
+  it('sends the exact bearer authorization from a user-scoped client', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response('[]', {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      }),
+    );
+    const resources = createSupabaseResources(TEST_ENV);
+
+    const result = await resources
+      .forAccessToken('user-scoped-token')
+      .from('profiles')
+      .select('*');
+
+    expect(result.error).toBeNull();
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    const requestInit = fetchSpy.mock.calls[0]?.[1];
+    expect(new Headers(requestInit?.headers).get('authorization')).toBe(
+      'Bearer user-scoped-token',
     );
   });
 });

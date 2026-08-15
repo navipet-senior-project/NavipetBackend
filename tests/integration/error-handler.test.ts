@@ -41,6 +41,53 @@ describe('error handling', () => {
     });
   });
 
+  it('maps malformed JSON to a safe 400 envelope', async () => {
+    app = await buildTestApp();
+    app.post('/__test/json', () => ({ accepted: true }));
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/__test/json',
+      headers: { 'content-type': 'application/json' },
+      payload: '{"privateDatabaseDetail":',
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toEqual({
+      error: {
+        code: 'VALIDATION_ERROR',
+        message: 'Invalid request',
+        requestId: anyString,
+      },
+    });
+    expect(response.body).not.toContain('privateDatabaseDetail');
+    expect(response.body).not.toContain('FST_ERR');
+  });
+
+  it('maps unsupported media types to a safe 415 envelope', async () => {
+    app = await buildTestApp();
+    app.post('/__test/media', () => ({ accepted: true }));
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/__test/media',
+      headers: { 'content-type': 'application/x-private-database' },
+      payload: 'private parser detail',
+    });
+
+    expect(response.statusCode).toBe(415);
+    expect(response.json()).toEqual({
+      error: {
+        code: 'VALIDATION_ERROR',
+        message: 'Unsupported media type',
+        requestId: anyString,
+      },
+    });
+    expect(response.body).not.toContain('private-database');
+    expect(response.body).not.toContain('private parser detail');
+    expect(response.body).not.toContain('FST_ERR');
+  });
+
   it('maps unknown routes to NOT_FOUND', async () => {
     app = await buildTestApp();
 

@@ -45,6 +45,9 @@ const EnvironmentSchema = Type.Object(
 
 const EnvironmentValidator = Schema.Compile(EnvironmentSchema);
 
+const RateLimitWindowPattern =
+  /^((?:\d+(?:\.\d+)?|\.\d+)) *(?:(m(?:illiseconds?|s(?:ecs?)?))|(s(?:ec(?:onds?|s)?)?)|(m(?:in(?:utes?|s)?)?)|(h(?:ours?|rs?)?)|(d(?:ays?)?)|(w(?:eeks?|ks?)?)|(y(?:ears?|rs?)?))?$/i;
+
 type ParsedEnvironment = Type.Static<typeof EnvironmentSchema>;
 export type Environment = Readonly<
   Omit<ParsedEnvironment, 'CORS_ORIGINS'> & {
@@ -70,6 +73,43 @@ function parseOptionalBoolean(
 function optionalValue(value: string | undefined): string | undefined {
   const normalized = value?.trim();
   return normalized === '' ? undefined : normalized;
+}
+
+function isHttpUrl(value: string): boolean {
+  try {
+    const url = new URL(value);
+    return (
+      (url.protocol === 'http:' || url.protocol === 'https:') &&
+      url.hostname.length > 0
+    );
+  } catch {
+    return false;
+  }
+}
+
+function isValidRateLimitWindow(value: string): boolean {
+  const match = RateLimitWindowPattern.exec(value);
+  if (match?.[1] === undefined) return false;
+
+  const amount = Number(match[1]);
+  const multiplier =
+    match[2] !== undefined
+      ? 1
+      : match[3] !== undefined
+        ? 1_000
+        : match[4] !== undefined
+          ? 60_000
+          : match[5] !== undefined
+            ? 3_600_000
+            : match[6] !== undefined
+              ? 86_400_000
+              : match[7] !== undefined
+                ? 604_800_000
+                : match[8] !== undefined
+                  ? 31_557_600_000
+                  : 1;
+  const milliseconds = amount * multiplier;
+  return Number.isFinite(milliseconds) && milliseconds > 0;
 }
 
 export function parseEnv(input: RawEnvironment): Environment {
@@ -114,6 +154,20 @@ export function parseEnv(input: RawEnvironment): Environment {
 
   try {
     const parsed = EnvironmentValidator.Parse(candidate);
+    const httpUrls = [
+      parsed.SUPABASE_URL,
+      parsed.SUPABASE_JWT_ISSUER,
+      ...parsed.CORS_ORIGINS,
+      ...(parsed.MULTISET_API_BASE_URL === undefined
+        ? []
+        : [parsed.MULTISET_API_BASE_URL]),
+    ];
+    if (
+      httpUrls.some((value) => !isHttpUrl(value)) ||
+      !isValidRateLimitWindow(parsed.RATE_LIMIT_WINDOW)
+    ) {
+      throw new Error('Environment value failed semantic validation');
+    }
     return Object.freeze({
       ...parsed,
       CORS_ORIGINS: Object.freeze([...parsed.CORS_ORIGINS]),

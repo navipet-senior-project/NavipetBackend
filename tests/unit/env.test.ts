@@ -48,6 +48,43 @@ describe('parseEnv', () => {
   });
 
   it.each([
+    ['http://localhost:1', '1ms'],
+    ['https://project-ref.supabase.co:65535/path?region=west', '.5 seconds'],
+  ])(
+    'accepts HTTP URL and rate-window boundaries %s and %s',
+    (supabaseUrl, rateLimitWindow) => {
+      const env = parseEnv({
+        ...required,
+        SUPABASE_URL: supabaseUrl,
+        RATE_LIMIT_WINDOW: rateLimitWindow,
+      });
+
+      expect(env.SUPABASE_URL).toBe(supabaseUrl);
+      expect(env.RATE_LIMIT_WINDOW).toBe(rateLimitWindow);
+    },
+  );
+
+  it.each([
+    ['SUPABASE_URL', 'https://?broken'],
+    ['SUPABASE_JWT_ISSUER', 'http://#missing-host'],
+    ['MULTISET_API_BASE_URL', 'https://example.com:65536'],
+    ['CORS_ORIGINS', 'https://valid.example,https://?broken'],
+  ])('rejects semantically invalid HTTP URL in %s', (key, value) => {
+    expect(() => parseEnv({ ...required, [key]: value })).toThrow(
+      'Invalid environment configuration',
+    );
+  });
+
+  it.each(['bananas', '0ms', '-1 second', '1 fortnight'])(
+    'rejects invalid rate-limit window %s',
+    (value) => {
+      expect(() => parseEnv({ ...required, RATE_LIMIT_WINDOW: value })).toThrow(
+        'Invalid environment configuration',
+      );
+    },
+  );
+
+  it.each([
     ['PORT', '0'],
     ['PORT', '65536'],
     ['BODY_LIMIT_BYTES', 'abc'],

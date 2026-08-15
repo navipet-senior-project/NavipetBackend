@@ -73,7 +73,6 @@ export class SupabaseJwtVerifier implements JwtVerifier {
         ...(claims.email === undefined ? {} : { email: claims.email }),
       };
     } catch (cause) {
-      if (cause instanceof AppError) throw cause;
       throw unauthorized(cause);
     }
   }
