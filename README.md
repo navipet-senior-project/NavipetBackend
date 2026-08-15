@@ -29,6 +29,36 @@ Fill the required Supabase values in `backend/.env`. Never copy a service-role
 key into the repository-root Flutter `.env`; Flutter bundles that file into the
 mobile application.
 
+## Test Swagger first
+
+You can start the backend and inspect its public OpenAPI documentation before
+connecting a real Supabase project. In `backend/.env`, use these non-secret
+local placeholders:
+
+```env
+SUPABASE_URL=http://127.0.0.1:54321
+SUPABASE_ANON_KEY=swagger-only-placeholder
+SUPABASE_JWT_ISSUER=http://127.0.0.1:54321/auth/v1
+SUPABASE_JWT_AUDIENCE=authenticated
+```
+
+Keep `DOCS_ENABLED=true`, then start the server from `backend/`:
+
+```bash
+npm install
+npm run dev
+```
+
+Open:
+
+- Swagger UI: <http://127.0.0.1:3000/docs/>
+- Health check: <http://127.0.0.1:3000/health>
+
+Press `Ctrl+C` in the server terminal to stop it. These placeholders only
+support startup, health, and Swagger inspection. Replace them with real
+Supabase project values before testing authentication, protected endpoints,
+or database access. Never use a service-role key in Flutter.
+
 ## Environment variables
 
 Required: `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_JWT_ISSUER`, and
