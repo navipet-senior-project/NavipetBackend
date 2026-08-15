@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 
-import { buildApp } from '../../src/app.js';
+import { buildApp, type BuildAppOptions } from '../../src/app.js';
 import type { Environment } from '../../src/config/env.js';
 
 export const TEST_ENV: Environment = Object.freeze({
@@ -21,8 +21,10 @@ export const TEST_ENV: Environment = Object.freeze({
 
 export async function buildTestApp(
   overrides: Partial<Environment> = {},
+  options: Omit<BuildAppOptions, 'env' | 'logger'> = {},
 ): Promise<FastifyInstance> {
   return buildApp({
+    ...options,
     env: Object.freeze({ ...TEST_ENV, ...overrides }),
     logger: false,
   });

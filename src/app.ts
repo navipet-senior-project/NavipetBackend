@@ -7,11 +7,20 @@ import { TypeBoxValidatorCompiler } from '@fastify/type-provider-typebox';
 
 import { parseEnv, type Environment } from './config/env.js';
 import healthRoutes from './modules/health/health.routes.js';
+import authPlugin, {
+  SupabaseJwtVerifier,
+  type JwtVerifier,
+} from './plugins/auth.js';
 import errorHandlerPlugin from './plugins/error-handler.js';
+import supabasePlugin, {
+  type SupabaseResources,
+} from './plugins/supabase.js';
 
 export interface BuildAppOptions {
   env?: Environment;
   logger?: FastifyServerOptions['logger'];
+  authVerifier?: JwtVerifier;
+  supabaseResources?: SupabaseResources;
 }
 
 export async function buildApp(
@@ -41,6 +50,20 @@ export async function buildApp(
   app.setValidatorCompiler(TypeBoxValidatorCompiler);
   app.decorate('config', config);
   await app.register(errorHandlerPlugin);
+  await app.register(supabasePlugin, {
+    ...(options.supabaseResources === undefined
+      ? {}
+      : { resources: options.supabaseResources }),
+  });
+  await app.register(authPlugin, {
+    verifier:
+      options.authVerifier ??
+      new SupabaseJwtVerifier(
+        app.supabase,
+        config.SUPABASE_JWT_ISSUER,
+        config.SUPABASE_JWT_AUDIENCE,
+      ),
+  });
   await app.register(healthRoutes);
 
   return app;
