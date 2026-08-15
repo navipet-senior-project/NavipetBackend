@@ -6,6 +6,7 @@ import Fastify, {
 import { TypeBoxValidatorCompiler } from '@fastify/type-provider-typebox';
 
 import { parseEnv, type Environment } from './config/env.js';
+import healthRoutes from './modules/health/health.routes.js';
 import errorHandlerPlugin from './plugins/error-handler.js';
 
 export interface BuildAppOptions {
@@ -40,6 +41,7 @@ export async function buildApp(
   app.setValidatorCompiler(TypeBoxValidatorCompiler);
   app.decorate('config', config);
   await app.register(errorHandlerPlugin);
+  await app.register(healthRoutes);
 
   return app;
 }
