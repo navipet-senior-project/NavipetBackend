@@ -20,19 +20,20 @@ user-scoped/RLS-aware, and optional admin clients.
 ## Local setup
 
 ```bash
-cd backend
+git clone https://github.com/Ben2104/NavipetBackend.git
+cd NavipetBackend
 cp .env.example .env
 npm install
 ```
 
-Fill the required Supabase values in `backend/.env`. Never copy a service-role
+Fill the required Supabase values in `.env`. Never copy a service-role
 key into the repository-root Flutter `.env`; Flutter bundles that file into the
 mobile application.
 
 ## Test Swagger first
 
 You can start the backend and inspect its public OpenAPI documentation before
-connecting a real Supabase project. In `backend/.env`, use these non-secret
+connecting a real Supabase project. In `.env`, use these non-secret
 local placeholders:
 
 ```env
@@ -67,6 +68,13 @@ Required: `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_JWT_ISSUER`, and
 Optional: `SUPABASE_SERVICE_ROLE_KEY`, `MULTISET_API_KEY`,
 `MULTISET_API_BASE_URL`, and `CORS_ORIGINS`. Runtime, logging, payload, rate
 limit, and docs defaults are documented in `.env.example`.
+
+## Database schema
+
+[`supabase/schema.sql`](supabase/schema.sql) owns NaviPet's tables, triggers,
+indexes, constraints, and Row Level Security policies. Apply it through the
+Supabase SQL Editor when creating or updating the project. The Flutter client
+lives in [`Ben2104/NaviPetFlutter`](https://github.com/Ben2104/NaviPetFlutter).
 
 ## Run
 
