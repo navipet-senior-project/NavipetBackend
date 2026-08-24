@@ -1,0 +1,54 @@
+# Render Blueprint for the NaviPet backend.
+# Docs: https://render.com/docs/blueprint-spec
+#
+# autoDeploy is false on purpose: deploys are triggered by the `deploy` job in
+# .github/workflows/ci.yml only after every quality gate passes. Render's own
+# push-based auto deploy would bypass CI.
+services:
+  - type: web
+    name: navipet-backend
+    runtime: node
+    plan: free
+    region: oregon
+    branch: main
+    autoDeploy: false
+    buildCommand: npm ci && npm run build
+    startCommand: npm start
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_VERSION
+        value: '22'
+      - key: NODE_ENV
+        value: production
+      - key: HOST
+        value: 0.0.0.0
+      # PORT is injected by Render; do not set it here.
+      - key: LOG_LEVEL
+        value: info
+      - key: BODY_LIMIT_BYTES
+        value: '1048576'
+      - key: RATE_LIMIT_MAX
+        value: '100'
+      - key: RATE_LIMIT_WINDOW
+        value: 1 minute
+      # Publicly exposes Swagger UI at /docs/. Set to false to keep the
+      # OpenAPI document private in production.
+      - key: DOCS_ENABLED
+        value: 'true'
+      # Secrets and per-environment values: set in the Render dashboard.
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_ANON_KEY
+        sync: false
+      - key: SUPABASE_JWT_ISSUER
+        sync: false
+      - key: SUPABASE_JWT_AUDIENCE
+        value: authenticated
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: MULTISET_API_KEY
+        sync: false
+      - key: MULTISET_API_BASE_URL
+        sync: false
+      - key: CORS_ORIGINS
+        sync: false
