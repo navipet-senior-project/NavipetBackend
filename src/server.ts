@@ -45,11 +45,17 @@ export function registerShutdownHandlers(
 
 export async function startServer(
   input: RawEnvironment = process.env,
+  registrar: SignalRegistrar = processSignals,
 ): Promise<FastifyInstance> {
   const env = parseEnv(input);
   const app = await buildApp({ env });
-  registerShutdownHandlers(app);
-  await app.listen({ host: env.HOST, port: env.PORT });
+  registerShutdownHandlers(app, registrar);
+  const listenAddress = await app.listen({ host: env.HOST, port: env.PORT });
+  if (env.DOCS_ENABLED) {
+    const publicAddress = input.RENDER_EXTERNAL_URL ?? listenAddress;
+    const swaggerUrl = new URL('/docs/', publicAddress).href;
+    app.log.info(`Swagger UI available at ${swaggerUrl}`);
+  }
   return app;
 }
 
