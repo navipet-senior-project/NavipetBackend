@@ -36,6 +36,49 @@ Supabase resources without constructing those dependencies themselves. The
 application can therefore be built in isolation for automated tests without
 starting a network listener.
 
+## Local API testing with Swagger UI
+
+Use Node.js 22 or newer and npm 11 or newer. From the repository root, install
+the dependencies and create a local environment file:
+
+```bash
+npm ci
+cp .env.example .env
+```
+
+Set the following values in `.env` for your Supabase project:
+
+```env
+DOCS_ENABLED=true
+SUPABASE_URL=https://<project-ref>.supabase.co
+SUPABASE_ANON_KEY=<publishable-or-anon-key>
+SUPABASE_JWT_ISSUER=https://<project-ref>.supabase.co/auth/v1
+SUPABASE_JWT_AUDIENCE=authenticated
+```
+
+The publishable key belongs in `SUPABASE_ANON_KEY`. Leave
+`SUPABASE_SERVICE_ROLE_KEY` empty unless you are explicitly testing an
+administrative server operation.
+
+Start the development server:
+
+```bash
+npm run dev
+```
+
+Open <http://127.0.0.1:3000/docs/> to view the available operations. Select an
+operation, choose **Try it out**, enter any required parameters, and choose
+**Execute**.
+
+For a protected route, first obtain a Supabase access token by signing in
+through the Flutter client or Supabase Auth. Choose **Authorize** in Swagger UI
+and paste the raw access token without adding the `Bearer` prefix; Swagger UI
+adds that prefix to the request. Select **Authorize**, close the dialog, and
+execute the protected operation.
+
+Use <http://127.0.0.1:3000/health> to confirm that the backend is running. Press
+`Ctrl+C` in the terminal to stop the server.
+
 ## Authentication
 
 Supabase Auth is the only identity provider.
