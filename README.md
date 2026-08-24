@@ -2,7 +2,7 @@
 
 ## Project purpose
 
-NaviPet Backend is the TypeScript API for the NaviPet indoor campus navigation
+NaviPet Backend is the TypeScript API for the NaviPet indoor/outdoor campus navigation
 application. It provides the trusted server boundary between the Flutter client
 and Supabase for authenticated user features such as profiles, class schedules,
 task progress, and future navigation data.
