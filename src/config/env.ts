@@ -5,6 +5,12 @@ import {
   DEFAULT_BODY_LIMIT_BYTES,
   DEFAULT_RATE_LIMIT_MAX,
   DEFAULT_RATE_LIMIT_WINDOW,
+  DEFAULT_AUTH_LOGIN_RATE_LIMIT_MAX,
+  DEFAULT_AUTH_LOGIN_RATE_LIMIT_WINDOW,
+  DEFAULT_AUTH_REGISTER_RATE_LIMIT_MAX,
+  DEFAULT_AUTH_REGISTER_RATE_LIMIT_WINDOW,
+  DEFAULT_AUTH_REFRESH_RATE_LIMIT_MAX,
+  DEFAULT_AUTH_REFRESH_RATE_LIMIT_WINDOW,
 } from './constants.js';
 
 const HttpUrl = Type.String({ pattern: '^https?://[^\\s]+$' });
@@ -30,6 +36,12 @@ const EnvironmentSchema = Type.Object(
     BODY_LIMIT_BYTES: Type.Integer({ minimum: 1 }),
     RATE_LIMIT_MAX: Type.Integer({ minimum: 1 }),
     RATE_LIMIT_WINDOW: Type.String({ minLength: 1 }),
+    AUTH_LOGIN_RATE_LIMIT_MAX: Type.Integer({ minimum: 1 }),
+    AUTH_LOGIN_RATE_LIMIT_WINDOW: Type.String({ minLength: 1 }),
+    AUTH_REGISTER_RATE_LIMIT_MAX: Type.Integer({ minimum: 1 }),
+    AUTH_REGISTER_RATE_LIMIT_WINDOW: Type.String({ minLength: 1 }),
+    AUTH_REFRESH_RATE_LIMIT_MAX: Type.Integer({ minimum: 1 }),
+    AUTH_REFRESH_RATE_LIMIT_WINDOW: Type.String({ minLength: 1 }),
     DOCS_ENABLED: Type.Boolean(),
     SUPABASE_URL: HttpUrl,
     SUPABASE_ANON_KEY: Type.String({ minLength: 1 }),
@@ -129,6 +141,26 @@ export function parseEnv(input: RawEnvironment): Environment {
     ),
     RATE_LIMIT_MAX: parseInteger(input.RATE_LIMIT_MAX, DEFAULT_RATE_LIMIT_MAX),
     RATE_LIMIT_WINDOW: input.RATE_LIMIT_WINDOW ?? DEFAULT_RATE_LIMIT_WINDOW,
+    AUTH_LOGIN_RATE_LIMIT_MAX: parseInteger(
+      input.AUTH_LOGIN_RATE_LIMIT_MAX,
+      DEFAULT_AUTH_LOGIN_RATE_LIMIT_MAX,
+    ),
+    AUTH_LOGIN_RATE_LIMIT_WINDOW:
+      input.AUTH_LOGIN_RATE_LIMIT_WINDOW ?? DEFAULT_AUTH_LOGIN_RATE_LIMIT_WINDOW,
+    AUTH_REGISTER_RATE_LIMIT_MAX: parseInteger(
+      input.AUTH_REGISTER_RATE_LIMIT_MAX,
+      DEFAULT_AUTH_REGISTER_RATE_LIMIT_MAX,
+    ),
+    AUTH_REGISTER_RATE_LIMIT_WINDOW:
+      input.AUTH_REGISTER_RATE_LIMIT_WINDOW ??
+      DEFAULT_AUTH_REGISTER_RATE_LIMIT_WINDOW,
+    AUTH_REFRESH_RATE_LIMIT_MAX: parseInteger(
+      input.AUTH_REFRESH_RATE_LIMIT_MAX,
+      DEFAULT_AUTH_REFRESH_RATE_LIMIT_MAX,
+    ),
+    AUTH_REFRESH_RATE_LIMIT_WINDOW:
+      input.AUTH_REFRESH_RATE_LIMIT_WINDOW ??
+      DEFAULT_AUTH_REFRESH_RATE_LIMIT_WINDOW,
     DOCS_ENABLED: parseOptionalBoolean(
       input.DOCS_ENABLED,
       nodeEnv !== 'production',
@@ -164,7 +196,10 @@ export function parseEnv(input: RawEnvironment): Environment {
     ];
     if (
       httpUrls.some((value) => !isHttpUrl(value)) ||
-      !isValidRateLimitWindow(parsed.RATE_LIMIT_WINDOW)
+      !isValidRateLimitWindow(parsed.RATE_LIMIT_WINDOW) ||
+      !isValidRateLimitWindow(parsed.AUTH_LOGIN_RATE_LIMIT_WINDOW) ||
+      !isValidRateLimitWindow(parsed.AUTH_REGISTER_RATE_LIMIT_WINDOW) ||
+      !isValidRateLimitWindow(parsed.AUTH_REFRESH_RATE_LIMIT_WINDOW)
     ) {
       throw new Error('Environment value failed semantic validation');
     }

@@ -6,6 +6,7 @@ import Fastify, {
 import { TypeBoxValidatorCompiler } from '@fastify/type-provider-typebox';
 
 import { parseEnv, type Environment } from './config/env.js';
+import authRoutes from './modules/auth/auth.routes.js';
 import healthRoutes from './modules/health/health.routes.js';
 import authPlugin, {
   SupabaseJwtVerifier,
@@ -73,6 +74,7 @@ export async function buildApp(
       ),
   };
   await app.register(authPlugin, authOptions);
+  await app.register(authRoutes);
   await app.register(healthRoutes);
 
   return app;
