@@ -32,14 +32,14 @@ const errorHandlerPlugin: FastifyPluginCallback = (fastify, _options, done) => {
   fastify.setErrorHandler((error: FastifyError, request, reply) => {
     if (error.validation !== undefined) {
       return reply
-        .status(400)
+        .status(422)
         .send(body(ErrorCode.VALIDATION_ERROR, 'Invalid request', request.id));
     }
 
     if (invalidRequestParserCodes.has(error.code)) {
       return reply
         .status(400)
-        .send(body(ErrorCode.VALIDATION_ERROR, 'Invalid request', request.id));
+        .send(body(ErrorCode.INVALID_JSON, 'Malformed JSON', request.id));
     }
 
     if (error.code === 'FST_ERR_CTP_INVALID_MEDIA_TYPE') {
