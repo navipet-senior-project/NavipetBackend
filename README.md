@@ -1,134 +1,122 @@
 # NaviPet Backend
 
-Fastify API foundation for NaviPet indoor campus navigation. Supabase Auth is
-the only identity provider; Flutter sends its Supabase access token as a bearer
-credential.
+## Project purpose
+
+NaviPet Backend is the TypeScript API for the NaviPet indoor/outdoor campus navigation
+application. It provides the trusted server boundary between the Flutter client
+and Supabase for authenticated user features such as profiles, class schedules,
+task progress, and future navigation data.
+
+The service does not manage passwords or create a separate identity system.
+Supabase Auth owns user identity, while this backend validates access tokens,
+applies application rules, and performs normal user data access under Supabase
+Row Level Security (RLS).
 
 ## Architecture
 
-`src/app.ts` composes the injectable Fastify application. `src/server.ts` owns
-environment loading, listening, and graceful shutdown. Feature modules own
-their routes and schemas. Supabase access is separated into public,
-user-scoped/RLS-aware, and optional admin clients.
+The backend uses Fastify and separates runtime concerns from application
+features:
 
-## Requirements
+- `src/server.ts` loads the environment, starts the HTTP server, and handles
+  graceful shutdown.
+- `src/app.ts` creates the Fastify application and registers infrastructure and
+  feature plugins.
+- `src/config/` validates runtime configuration before the server accepts
+  traffic.
+- `src/plugins/` owns authentication, Supabase clients, CORS, rate limiting,
+  error handling, and API documentation infrastructure.
+- `src/modules/` contains feature routes and their schemas.
+- `src/common/` contains shared application errors and error codes.
+- `supabase/schema.sql` defines application tables, triggers, constraints,
+  indexes, and RLS policies.
 
-- Node.js 22 or newer
-- npm 11 or newer
-- A Supabase project
+Dependencies flow inward through Fastify decorators and explicit interfaces.
+Routes consume validated configuration, authenticated identity, and scoped
+Supabase resources without constructing those dependencies themselves. The
+application can therefore be built in isolation for automated tests without
+starting a network listener.
 
-## Local setup
+## Local API testing with Swagger UI
+
+Use Node.js 22 or newer and npm 11 or newer. From the repository root, install
+the dependencies and create a local environment file:
 
 ```bash
-git clone https://github.com/Ben2104/NavipetBackend.git
-cd NavipetBackend
+npm ci
 cp .env.example .env
-npm install
 ```
 
-Fill the required Supabase values in `.env`. Never copy a service-role
-key into the repository-root Flutter `.env`; Flutter bundles that file into the
-mobile application.
-
-## Test Swagger first
-
-You can start the backend and inspect its public OpenAPI documentation before
-connecting a real Supabase project. In `.env`, use these non-secret
-local placeholders:
+Set the following values in `.env` for your Supabase project:
 
 ```env
-SUPABASE_URL=http://127.0.0.1:54321
-SUPABASE_ANON_KEY=swagger-only-placeholder
-SUPABASE_JWT_ISSUER=http://127.0.0.1:54321/auth/v1
+DOCS_ENABLED=true
+SUPABASE_URL=https://<project-ref>.supabase.co
+SUPABASE_ANON_KEY=<publishable-or-anon-key>
+SUPABASE_JWT_ISSUER=https://<project-ref>.supabase.co/auth/v1
 SUPABASE_JWT_AUDIENCE=authenticated
 ```
 
-Keep `DOCS_ENABLED=true`, then start the server from `backend/`:
+The publishable key belongs in `SUPABASE_ANON_KEY`. Leave
+`SUPABASE_SERVICE_ROLE_KEY` empty unless you are explicitly testing an
+administrative server operation.
 
-```bash
-npm install
-npm run dev
-```
-
-Open:
-
-- Swagger UI: <http://127.0.0.1:3000/docs/>
-- Health check: <http://127.0.0.1:3000/health>
-
-Press `Ctrl+C` in the server terminal to stop it. These placeholders only
-support startup, health, and Swagger inspection. Replace them with real
-Supabase project values before testing authentication, protected endpoints,
-or database access. Never use a service-role key in Flutter.
-
-## Environment variables
-
-Required: `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_JWT_ISSUER`, and
-`SUPABASE_JWT_AUDIENCE`.
-
-Optional: `SUPABASE_SERVICE_ROLE_KEY`, `MULTISET_API_KEY`,
-`MULTISET_API_BASE_URL`, and `CORS_ORIGINS`. Runtime, logging, payload, rate
-limit, and docs defaults are documented in `.env.example`.
-
-## Database schema
-
-[`supabase/schema.sql`](supabase/schema.sql) owns NaviPet's tables, triggers,
-indexes, constraints, and Row Level Security policies. Apply it through the
-Supabase SQL Editor when creating or updating the project. The Flutter client
-lives in [`Ben2104/NaviPetFlutter`](https://github.com/Ben2104/NaviPetFlutter).
-
-## Run
+Start the development server:
 
 ```bash
 npm run dev
 ```
 
-Production build:
+Open <http://127.0.0.1:3000/docs/> to view the available operations. Select an
+operation, choose **Try it out**, enter any required parameters, and choose
+**Execute**.
 
-```bash
-npm run build
-npm start
-```
+For a protected route, first obtain a Supabase access token by signing in
+through the Flutter client or Supabase Auth. Choose **Authorize** in Swagger UI
+and paste the raw access token without adding the `Bearer` prefix; Swagger UI
+adds that prefix to the request. Select **Authorize**, close the dialog, and
+execute the protected operation.
 
-## Verification
+Use <http://127.0.0.1:3000/health> to confirm that the backend is running. Press
+`Ctrl+C` in the terminal to stop the server.
 
-```bash
-npm test
-npm run typecheck
-npm run lint
-npm run build
-```
+## Authentication
 
-## Health and API documentation
+Supabase Auth is the only identity provider.
 
-- `GET /health`
-- `GET /api/v1/health`
-- `/docs/` when `DOCS_ENABLED=true`
-- `/docs/json` for the generated OpenAPI document
+1. The Flutter client signs in through Supabase Auth. Anonymous Supabase users
+   are supported.
+2. Supabase returns an access token to the client.
+3. The client sends that token as `Authorization: Bearer <access-token>` when
+   calling a protected backend route.
+4. The authentication plugin parses the bearer token and requests its claims
+   through the Supabase public client.
+5. The backend validates the subject UUID, issuer, audience, and expiration.
+6. A successful check stores the trusted user identity and original access
+   token on the Fastify request for protected handlers.
 
-Health endpoints report process liveness and do not contact Supabase or
-MultiSet.
+Missing, malformed, expired, or otherwise invalid credentials return a generic
+`401 Authentication required` response. The backend never accepts a user ID
+from request data as proof of identity.
 
-## Authentication flow
+## Supabase security
 
-1. Flutter signs in through Supabase Auth, including anonymous sign-in when
-   selected.
-2. Flutter sends `Authorization: Bearer <supabase-access-token>` to a protected
-   Fastify route.
-3. Fastify verifies Supabase claims, issuer, audience, expiry, and user ID.
-4. Protected handlers read the trusted identity from `request.user`.
+The Supabase integration separates capabilities by trust level:
 
-Fastify stores no passwords and never trusts a client-provided user ID.
+- The public client uses the publishable/anonymous key for public operations
+  and token-claim verification.
+- A user-scoped client forwards the verified access token to Supabase so
+  database operations execute as that user and remain subject to RLS.
+- The optional admin client uses the service-role key only for explicit
+  server-side administrative work. It is not used for normal user requests or
+  token verification.
 
-## Supabase trust model
+Supabase Auth stores credentials. Application tables reference
+`auth.users` by UUID and store only application-owned data. RLS policies in
+`supabase/schema.sql` restrict profiles, classes, and task completions to their
+owners. Foreign keys, checks, and triggers enforce ownership and data integrity
+inside the database.
 
-Normal user data access uses a Supabase client carrying the verified user's
-token, preserving Row Level Security. The optional service-role client is a
-separate server-only capability and is not attached to requests or used for
-JWT verification.
-
-## Current milestone boundary
-
-This foundation contains health, security, authentication middleware, OpenAPI,
-and test infrastructure. Database migrations, profiles, building/floor/POI
-APIs, navigation, favorites, guide content, and MultiSet network integration
-arrive in later controlled milestones.
+The service-role key must remain server-only and must never be included in the
+Flutter application, committed to source control, or exposed to clients.
+Sensitive request headers and configured secrets are redacted from backend
+logs.

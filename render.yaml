@@ -31,6 +31,18 @@ services:
         value: '100'
       - key: RATE_LIMIT_WINDOW
         value: 1 minute
+      - key: AUTH_LOGIN_RATE_LIMIT_MAX
+        value: '10'
+      - key: AUTH_LOGIN_RATE_LIMIT_WINDOW
+        value: 1 minute
+      - key: AUTH_REGISTER_RATE_LIMIT_MAX
+        value: '5'
+      - key: AUTH_REGISTER_RATE_LIMIT_WINDOW
+        value: 1 hour
+      - key: AUTH_REFRESH_RATE_LIMIT_MAX
+        value: '30'
+      - key: AUTH_REFRESH_RATE_LIMIT_WINDOW
+        value: 1 minute
       # Publicly exposes Swagger UI at /docs/. Set to false to keep the
       # OpenAPI document private in production.
       - key: DOCS_ENABLED

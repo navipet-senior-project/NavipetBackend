@@ -1,6 +1,5 @@
 import type { FastifyPluginCallbackTypebox } from '@fastify/type-provider-typebox';
 
-import { API_V1_PREFIX } from '../../config/constants.js';
 import { HealthRouteSchema } from './health.schema.js';
 
 const healthRoutes: FastifyPluginCallbackTypebox = (fastify, _options, done) => {
@@ -11,7 +10,6 @@ const healthRoutes: FastifyPluginCallbackTypebox = (fastify, _options, done) => 
   };
 
   fastify.get('/health', options, handler);
-  fastify.get(`${API_V1_PREFIX}/health`, options, handler);
 
   done();
 };
