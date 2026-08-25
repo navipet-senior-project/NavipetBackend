@@ -1,5 +1,7 @@
 import Type from 'typebox';
 
+import { ErrorResponseSchema } from '../../common/errors/error-response.schema.js';
+
 export const LoginBodySchema = Type.Object(
   {
     email: Type.String({
@@ -26,6 +28,12 @@ export const LoginRouteSchema = {
   body: LoginBodySchema,
   response: {
     200: LoginResponseSchema,
+    400: ErrorResponseSchema,
+    401: ErrorResponseSchema,
+    403: ErrorResponseSchema,
+    422: ErrorResponseSchema,
+    429: ErrorResponseSchema,
+    502: ErrorResponseSchema,
   },
 };
 
@@ -64,6 +72,11 @@ export const RegisterRouteSchema = {
   body: RegisterBodySchema,
   response: {
     201: TokenResponseSchema,
+    400: ErrorResponseSchema,
+    409: ErrorResponseSchema,
+    422: ErrorResponseSchema,
+    429: ErrorResponseSchema,
+    500: ErrorResponseSchema,
   },
 };
 
@@ -78,6 +91,11 @@ export const RefreshRouteSchema = {
   body: RefreshBodySchema,
   response: {
     200: LoginResponseSchema,
+    400: ErrorResponseSchema,
+    401: ErrorResponseSchema,
+    422: ErrorResponseSchema,
+    429: ErrorResponseSchema,
+    500: ErrorResponseSchema,
   },
 };
 
@@ -85,12 +103,27 @@ export const LogoutRouteSchema = {
   tags: ['Authentication'],
   summary: 'Revoke the current session',
   security: [{ bearerAuth: [] }],
+  response: {
+    400: ErrorResponseSchema,
+    401: ErrorResponseSchema,
+    429: ErrorResponseSchema,
+    500: ErrorResponseSchema,
+    503: ErrorResponseSchema,
+  },
 };
 
 export const LogoutAllRouteSchema = {
   tags: ['Authentication'],
   summary: 'Revoke every session for the authenticated user',
   security: [{ bearerAuth: [] }],
+  response: {
+    400: ErrorResponseSchema,
+    401: ErrorResponseSchema,
+    404: ErrorResponseSchema,
+    429: ErrorResponseSchema,
+    500: ErrorResponseSchema,
+    503: ErrorResponseSchema,
+  },
 };
 
 export const MeResponseSchema = Type.Object(
@@ -111,5 +144,11 @@ export const MeRouteSchema = {
   security: [{ bearerAuth: [] }],
   response: {
     200: MeResponseSchema,
+    401: ErrorResponseSchema,
+    403: ErrorResponseSchema,
+    404: ErrorResponseSchema,
+    429: ErrorResponseSchema,
+    500: ErrorResponseSchema,
+    503: ErrorResponseSchema,
   },
 };
