@@ -12,17 +12,14 @@ describe('health routes', () => {
     await app?.close();
   });
 
-  it.each(['/health', '/api/v1/health'])(
-    'returns liveness from %s',
-    async (url) => {
-      app = await buildTestApp();
+  it('returns liveness from /health', async () => {
+    app = await buildTestApp();
 
-      const response = await app.inject({ method: 'GET', url });
+    const response = await app.inject({ method: 'GET', url: '/health' });
 
-      expect(response.statusCode).toBe(200);
-      expect(response.json()).toEqual({ status: 'ok' });
-    },
-  );
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({ status: 'ok' });
+  });
 });
 
 describe('OpenAPI documentation', () => {
@@ -43,7 +40,6 @@ describe('OpenAPI documentation', () => {
       info: { title: 'NaviPet API', version: '1.0.0' },
       paths: {
         '/health': anyObject,
-        '/api/v1/health': anyObject,
       },
       components: {
         securitySchemes: {

@@ -99,6 +99,23 @@ describe('parseEnv', () => {
     );
   });
 
+  it('defaults the auth rate-limit variables when unset', () => {
+    const env = parseEnv(required);
+
+    expect(env.AUTH_LOGIN_RATE_LIMIT_MAX).toBe(10);
+    expect(env.AUTH_LOGIN_RATE_LIMIT_WINDOW).toBe('1 minute');
+    expect(env.AUTH_REGISTER_RATE_LIMIT_MAX).toBe(5);
+    expect(env.AUTH_REGISTER_RATE_LIMIT_WINDOW).toBe('1 hour');
+    expect(env.AUTH_REFRESH_RATE_LIMIT_MAX).toBe(30);
+    expect(env.AUTH_REFRESH_RATE_LIMIT_WINDOW).toBe('1 minute');
+  });
+
+  it('rejects an invalid auth rate-limit window', () => {
+    expect(() =>
+      parseEnv({ ...required, AUTH_LOGIN_RATE_LIMIT_WINDOW: 'not-a-window' }),
+    ).toThrow('Invalid environment configuration');
+  });
+
   it('rejects a missing required Supabase value', () => {
     expect(() =>
       parseEnv({
