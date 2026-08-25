@@ -15,7 +15,6 @@ const noSession = {
 const CredentialDenialCodes = new Set<string>([
   'invalid_credentials',
   'email_not_confirmed',
-  'user_banned',
 ]);
 
 export interface ClaimsGateway {

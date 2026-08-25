@@ -9,10 +9,22 @@ const authRoutes: FastifyPluginCallbackTypebox = (fastify, _options, done) => {
   const handler = async (request: {
     body: { email: string; password: string };
   }): Promise<{ access_token: string; refresh_token: string }> => {
+    const email = request.body.email.trim().toLowerCase();
     let tokens;
     try {
-      tokens = await fastify.supabase.signInWithPassword(request.body);
+      tokens = await fastify.supabase.signInWithPassword({
+        email,
+        password: request.body.password,
+      });
     } catch (cause) {
+      if ((cause as { code?: string }).code === 'user_banned') {
+        throw new AppError({
+          code: ErrorCode.ACCOUNT_DISABLED,
+          statusCode: 403,
+          message: 'This account is disabled.',
+          cause,
+        });
+      }
       throw new AppError({
         code: ErrorCode.UPSTREAM_ERROR,
         statusCode: 502,
@@ -22,9 +34,9 @@ const authRoutes: FastifyPluginCallbackTypebox = (fastify, _options, done) => {
     }
     if (tokens === null) {
       throw new AppError({
-        code: ErrorCode.UNAUTHORIZED,
+        code: ErrorCode.INVALID_CREDENTIALS,
         statusCode: 401,
-        message: 'Invalid email or password',
+        message: 'Email or password is incorrect.',
       });
     }
     return {

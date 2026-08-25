@@ -38,7 +38,7 @@ export interface JwtVerifier {
 
 function unauthorized(cause?: unknown): AppError {
   return new AppError({
-    code: ErrorCode.UNAUTHORIZED,
+    code: ErrorCode.INVALID_ACCESS_TOKEN,
     statusCode: 401,
     message: 'Authentication required',
     cause,

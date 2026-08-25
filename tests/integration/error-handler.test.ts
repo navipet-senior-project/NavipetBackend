@@ -31,7 +31,7 @@ describe('error handling', () => {
       payload: { name: 42 },
     });
 
-    expect(response.statusCode).toBe(400);
+    expect(response.statusCode).toBe(422);
     expect(response.json()).toEqual({
       error: {
         code: 'VALIDATION_ERROR',
@@ -55,8 +55,8 @@ describe('error handling', () => {
     expect(response.statusCode).toBe(400);
     expect(response.json()).toEqual({
       error: {
-        code: 'VALIDATION_ERROR',
-        message: 'Invalid request',
+        code: 'INVALID_JSON',
+        message: 'Malformed JSON',
         requestId: anyString,
       },
     });

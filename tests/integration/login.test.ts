@@ -68,8 +68,37 @@ describe('password login', () => {
     expect(response.statusCode).toBe(401);
     expect(response.json()).toEqual({
       error: {
-        code: 'UNAUTHORIZED',
-        message: 'Invalid email or password',
+        code: 'INVALID_CREDENTIALS',
+        message: 'Email or password is incorrect.',
+        requestId: anyString,
+      },
+    });
+  });
+
+  it('returns 403 ACCOUNT_DISABLED for a banned account with correct credentials', async () => {
+    const supabaseResources = {
+      ...createSupabaseResources(TEST_ENV),
+      signInWithPassword: vi.fn().mockRejectedValue({
+        code: 'user_banned',
+        message: 'User is banned',
+      }),
+    };
+    app = await buildTestApp({}, { supabaseResources });
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/v1/auth/login',
+      payload: {
+        email: 'student@example.com',
+        password: 'correct horse battery staple',
+      },
+    });
+
+    expect(response.statusCode).toBe(403);
+    expect(response.json()).toEqual({
+      error: {
+        code: 'ACCOUNT_DISABLED',
+        message: anyString,
         requestId: anyString,
       },
     });
@@ -151,7 +180,7 @@ describe('password login', () => {
       payload: { email: 'student@example.com' },
     });
 
-    expect(response.statusCode).toBe(400);
+    expect(response.statusCode).toBe(422);
     expect(response.json()).toEqual({
       error: {
         code: 'VALIDATION_ERROR',
@@ -176,7 +205,7 @@ describe('password login', () => {
       payload: { email: 'not-an-email', password: 'password' },
     });
 
-    expect(response.statusCode).toBe(400);
+    expect(response.statusCode).toBe(422);
     expect(signInWithPassword).not.toHaveBeenCalled();
   });
 });
