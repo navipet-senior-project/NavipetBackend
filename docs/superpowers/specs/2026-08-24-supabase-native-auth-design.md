@@ -31,7 +31,7 @@ refresh-token rotation, and reuse detection server-side.
 | `POST /auth/refresh` | `client.auth.refreshSession({refresh_token})` | no |
 | `POST /auth/logout` | `adminClient.auth.admin.signOut(accessToken, 'local')` | yes |
 | `POST /auth/logout-all` | `adminClient.auth.admin.signOut(accessToken, 'global')` | yes |
-| `GET /auth/me` | existing `authenticate` preHandler + `getClaims` | yes |
+| `GET /auth/me` | existing `authenticate` preHandler + `adminClient.auth.admin.getUserById(id)` | yes |
 
 ## Deviations from the literal spec
 
@@ -73,6 +73,12 @@ refresh-token rotation, and reuse detection server-side.
    anonymizes it into a `401`). Supabase only returns `user_banned` after
    password verification succeeds, so this doesn't introduce an enumeration
    vector.
+8. **`GET /auth/me` also requires `adminClient`.** The JWT claims from
+   `getClaims` only carry `sub`/`email`/`iss`/`aud`/`exp` — no `status` or
+   `createdAt`. Those come from `adminClient.auth.admin.getUserById(id)`
+   (`banned_until` present → `DISABLED`, absent → `ACTIVE`; `created_at` →
+   `createdAt`). Same `503 UPSTREAM_ERROR` fallback as logout if the admin
+   client is unavailable.
 
 ## Error codes (added to `ErrorCode` union)
 
