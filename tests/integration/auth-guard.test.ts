@@ -50,7 +50,7 @@ describe('authentication guard', () => {
     expect(response.statusCode).toBe(401);
     expect(response.json()).toEqual({
       error: {
-        code: 'UNAUTHORIZED',
+        code: 'INVALID_ACCESS_TOKEN',
         message: 'Authentication required',
         requestId: anyString,
       },
@@ -130,7 +130,7 @@ describe('authentication guard', () => {
     expect(response.statusCode).toBe(401);
     expect(response.json()).toEqual({
       error: {
-        code: 'UNAUTHORIZED',
+        code: 'INVALID_ACCESS_TOKEN',
         message: 'Authentication required',
         requestId: anyString,
       },
@@ -203,7 +203,7 @@ describe('SupabaseJwtVerifier', () => {
     );
 
     await expect(verifier.verify('token')).rejects.toMatchObject({
-      code: ErrorCode.UNAUTHORIZED,
+      code: ErrorCode.INVALID_ACCESS_TOKEN,
       statusCode: 401,
     });
   });
@@ -216,7 +216,7 @@ describe('SupabaseJwtVerifier', () => {
     );
 
     await expect(verifier.verify('token')).rejects.toMatchObject({
-      code: ErrorCode.UNAUTHORIZED,
+      code: ErrorCode.INVALID_ACCESS_TOKEN,
       statusCode: 401,
       message: 'Authentication required',
       cause: expect.any(Error) as unknown,
