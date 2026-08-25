@@ -23,12 +23,12 @@ describe('auth route rate limits', () => {
 
     const first = await app.inject({
       method: 'POST',
-      url: '/api/v1/auth/login',
+      url: '/auth/login',
       payload: { email: 'student@example.com', password: 'wrong-password' },
     });
     const second = await app.inject({
       method: 'POST',
-      url: '/api/v1/auth/login',
+      url: '/auth/login',
       payload: { email: 'student@example.com', password: 'wrong-password' },
     });
 
@@ -52,12 +52,12 @@ describe('auth route rate limits', () => {
 
     const first = await app.inject({
       method: 'POST',
-      url: '/api/v1/auth/register',
+      url: '/auth/register',
       payload: { email: 'student@example.com', password: 'a-long-user-password' },
     });
     const second = await app.inject({
       method: 'POST',
-      url: '/api/v1/auth/register',
+      url: '/auth/register',
       payload: { email: 'student@example.com', password: 'a-long-user-password' },
     });
 
@@ -77,12 +77,12 @@ describe('auth route rate limits', () => {
 
     const first = await app.inject({
       method: 'POST',
-      url: '/api/v1/auth/refresh',
+      url: '/auth/refresh',
       payload: { refreshToken: 'some-token' },
     });
     const second = await app.inject({
       method: 'POST',
-      url: '/api/v1/auth/refresh',
+      url: '/auth/refresh',
       payload: { refreshToken: 'some-token' },
     });
 

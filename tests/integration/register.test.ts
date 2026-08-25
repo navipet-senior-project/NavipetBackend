@@ -24,7 +24,7 @@ describe('registration', () => {
 
     const response = await app.inject({
       method: 'POST',
-      url: '/api/v1/auth/register',
+      url: '/auth/register',
       payload: { email: 'Student@Example.com', password: 'a-long-user-password' },
     });
 
@@ -50,7 +50,7 @@ describe('registration', () => {
 
     const response = await app.inject({
       method: 'POST',
-      url: '/api/v1/auth/register',
+      url: '/auth/register',
       payload: { email: 'student@example.com', password: 'a-long-user-password' },
     });
 
@@ -65,7 +65,7 @@ describe('registration', () => {
 
     const response = await app.inject({
       method: 'POST',
-      url: '/api/v1/auth/register',
+      url: '/auth/register',
       payload: { email: 'student@example.com', password: 'a-long-user-password' },
     });
 
@@ -84,7 +84,7 @@ describe('registration', () => {
 
     const response = await app.inject({
       method: 'POST',
-      url: '/api/v1/auth/register',
+      url: '/auth/register',
       payload: { email: 'student@example.com', password: 'a-long-user-password' },
     });
 
@@ -98,7 +98,7 @@ describe('registration', () => {
 
     const response = await app.inject({
       method: 'POST',
-      url: '/api/v1/auth/register',
+      url: '/auth/register',
       payload: { email: 'student@example.com', password: 'a'.repeat(129) },
     });
 
@@ -113,7 +113,7 @@ describe('registration', () => {
 
     const response = await app.inject({
       method: 'POST',
-      url: '/api/v1/auth/register',
+      url: '/auth/register',
       payload: { email: 'student@example.com', password: 'short' },
     });
 
@@ -128,7 +128,7 @@ describe('registration', () => {
 
     const response = await app.inject({
       method: 'POST',
-      url: '/api/v1/auth/register',
+      url: '/auth/register',
       headers: { 'content-type': 'application/json' },
       payload: '{"email":',
     });
@@ -145,7 +145,7 @@ describe('registration', () => {
 
     const response = await app.inject({
       method: 'POST',
-      url: '/api/v1/auth/register',
+      url: '/auth/register',
       payload: { email: 'student@example.com', password: 'a-long-user-password' },
     });
 
@@ -167,7 +167,7 @@ describe('registration', () => {
 
     const response = await app.inject({
       method: 'POST',
-      url: '/api/v1/auth/register',
+      url: '/auth/register',
       payload: { email: 'student@example.com', password: 'a-long-user-password' },
     });
 

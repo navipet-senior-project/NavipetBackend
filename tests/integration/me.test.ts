@@ -37,7 +37,7 @@ describe('me', () => {
 
     const response = await app.inject({
       method: 'GET',
-      url: '/api/v1/auth/me',
+      url: '/auth/me',
       headers: { authorization: 'Bearer valid-access-token' },
     });
 
@@ -69,7 +69,7 @@ describe('me', () => {
 
     const response = await app.inject({
       method: 'GET',
-      url: '/api/v1/auth/me',
+      url: '/auth/me',
       headers: { authorization: 'Bearer valid-access-token' },
     });
 
@@ -89,7 +89,7 @@ describe('me', () => {
 
     const response = await app.inject({
       method: 'GET',
-      url: '/api/v1/auth/me',
+      url: '/auth/me',
       headers: { authorization: 'Bearer valid-access-token' },
     });
 
@@ -102,7 +102,7 @@ describe('me', () => {
   it('returns 401 INVALID_ACCESS_TOKEN without a bearer token', async () => {
     app = await buildTestApp({}, { supabaseResources: createSupabaseResources(TEST_ENV) });
 
-    const response = await app.inject({ method: 'GET', url: '/api/v1/auth/me' });
+    const response = await app.inject({ method: 'GET', url: '/auth/me' });
 
     expect(response.statusCode).toBe(401);
   });

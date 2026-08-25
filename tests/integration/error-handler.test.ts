@@ -282,8 +282,8 @@ describe('HTTP hardening', () => {
     const responses = await Promise.all([
       app.inject({ method: 'GET', url: '/health' }),
       app.inject({ method: 'GET', url: '/health' }),
-      app.inject({ method: 'GET', url: '/api/v1/health' }),
-      app.inject({ method: 'GET', url: '/api/v1/health' }),
+      app.inject({ method: 'GET', url: '/health' }),
+      app.inject({ method: 'GET', url: '/health' }),
     ]);
 
     expect(responses.map((response) => response.statusCode)).toEqual([

@@ -42,7 +42,7 @@ describe('logout-all', () => {
 
     const response = await app.inject({
       method: 'POST',
-      url: '/api/v1/auth/logout-all',
+      url: '/auth/logout-all',
       headers: { authorization: 'Bearer valid-access-token' },
     });
 
@@ -72,7 +72,7 @@ describe('logout-all', () => {
 
     await app.inject({
       method: 'POST',
-      url: '/api/v1/auth/logout-all',
+      url: '/auth/logout-all',
       headers: { authorization: 'Bearer valid-access-token' },
     });
 
@@ -95,7 +95,7 @@ describe('logout-all', () => {
 
     const response = await app.inject({
       method: 'POST',
-      url: '/api/v1/auth/logout-all',
+      url: '/auth/logout-all',
       headers: { authorization: 'Bearer valid-access-token' },
     });
 
@@ -109,7 +109,7 @@ describe('logout-all', () => {
   it('returns 401 INVALID_ACCESS_TOKEN without a bearer token', async () => {
     app = await buildTestApp({}, { supabaseResources: createSupabaseResources(TEST_ENV) });
 
-    const response = await app.inject({ method: 'POST', url: '/api/v1/auth/logout-all' });
+    const response = await app.inject({ method: 'POST', url: '/auth/logout-all' });
 
     expect(response.statusCode).toBe(401);
   });

@@ -3,7 +3,6 @@ import type { FastifyReply } from 'fastify';
 
 import { AppError } from '../../common/errors/app-error.js';
 import { ErrorCode } from '../../common/errors/error-codes.js';
-import { API_V1_PREFIX } from '../../config/constants.js';
 import type { AuthenticatedUser } from '../../plugins/auth.js';
 import {
   LoginRouteSchema,
@@ -78,7 +77,6 @@ const authRoutes: FastifyPluginCallbackTypebox = (fastify, _options, done) => {
   };
 
   fastify.post('/auth/login', loginOptions, loginHandler);
-  fastify.post(`${API_V1_PREFIX}/auth/login`, loginOptions, loginHandler);
 
   const registerHandler = async (
     request: { body: { email: string; password: string } },
@@ -133,7 +131,6 @@ const authRoutes: FastifyPluginCallbackTypebox = (fastify, _options, done) => {
   };
 
   fastify.post('/auth/register', registerOptions, registerHandler);
-  fastify.post(`${API_V1_PREFIX}/auth/register`, registerOptions, registerHandler);
 
   const refreshHandler = async (request: {
     body: { refreshToken: string };
@@ -184,7 +181,6 @@ const authRoutes: FastifyPluginCallbackTypebox = (fastify, _options, done) => {
   };
 
   fastify.post('/auth/refresh', refreshOptions, refreshHandler);
-  fastify.post(`${API_V1_PREFIX}/auth/refresh`, refreshOptions, refreshHandler);
 
   const logoutHandler = async (
     request: { user: AuthenticatedUser | null; accessToken: string | null },
@@ -200,7 +196,6 @@ const authRoutes: FastifyPluginCallbackTypebox = (fastify, _options, done) => {
   };
 
   fastify.post('/auth/logout', logoutOptions, logoutHandler);
-  fastify.post(`${API_V1_PREFIX}/auth/logout`, logoutOptions, logoutHandler);
 
   const logoutAllHandler = async (
     request: { user: AuthenticatedUser | null; accessToken: string | null },
@@ -224,11 +219,6 @@ const authRoutes: FastifyPluginCallbackTypebox = (fastify, _options, done) => {
   };
 
   fastify.post('/auth/logout-all', logoutAllOptions, logoutAllHandler);
-  fastify.post(
-    `${API_V1_PREFIX}/auth/logout-all`,
-    logoutAllOptions,
-    logoutAllHandler,
-  );
 
   const meHandler = async (request: {
     user: AuthenticatedUser | null;
@@ -267,7 +257,6 @@ const authRoutes: FastifyPluginCallbackTypebox = (fastify, _options, done) => {
   };
 
   fastify.get('/auth/me', meOptions, meHandler);
-  fastify.get(`${API_V1_PREFIX}/auth/me`, meOptions, meHandler);
 
   done();
 };

@@ -32,7 +32,7 @@ describe('logout', () => {
 
     const response = await app.inject({
       method: 'POST',
-      url: '/api/v1/auth/logout',
+      url: '/auth/logout',
       headers: { authorization: 'Bearer valid-access-token' },
     });
 
@@ -51,12 +51,12 @@ describe('logout', () => {
 
     const first = await app.inject({
       method: 'POST',
-      url: '/api/v1/auth/logout',
+      url: '/auth/logout',
       headers: { authorization: 'Bearer valid-access-token' },
     });
     const second = await app.inject({
       method: 'POST',
-      url: '/api/v1/auth/logout',
+      url: '/auth/logout',
       headers: { authorization: 'Bearer valid-access-token' },
     });
 
@@ -69,7 +69,7 @@ describe('logout', () => {
     const supabaseResources = { ...createSupabaseResources(TEST_ENV), adminSignOut };
     app = await buildTestApp({}, { supabaseResources });
 
-    const response = await app.inject({ method: 'POST', url: '/api/v1/auth/logout' });
+    const response = await app.inject({ method: 'POST', url: '/auth/logout' });
 
     expect(response.statusCode).toBe(401);
     expect(response.json()).toEqual({

@@ -15,39 +15,36 @@ describe('password login', () => {
     await app?.close();
   });
 
-  it.each(['/auth/login', '/api/v1/auth/login'])(
-    'returns Supabase tokens from %s',
-    async (url) => {
-      const signInWithPassword = vi.fn().mockResolvedValue({
-        accessToken: 'signed-access-token',
-        refreshToken: 'rotating-refresh-token',
-      });
-      const supabaseResources = {
-        ...createSupabaseResources(TEST_ENV),
-        signInWithPassword,
-      };
-      app = await buildTestApp({}, { supabaseResources });
+  it('returns Supabase tokens from /auth/login', async () => {
+    const signInWithPassword = vi.fn().mockResolvedValue({
+      accessToken: 'signed-access-token',
+      refreshToken: 'rotating-refresh-token',
+    });
+    const supabaseResources = {
+      ...createSupabaseResources(TEST_ENV),
+      signInWithPassword,
+    };
+    app = await buildTestApp({}, { supabaseResources });
 
-      const response = await app.inject({
-        method: 'POST',
-        url,
-        payload: {
-          email: 'student@example.com',
-          password: 'correct horse battery staple',
-        },
-      });
-
-      expect(response.statusCode).toBe(200);
-      expect(response.json()).toEqual({
-        access_token: 'signed-access-token',
-        refresh_token: 'rotating-refresh-token',
-      });
-      expect(signInWithPassword).toHaveBeenCalledWith({
+    const response = await app.inject({
+      method: 'POST',
+      url: '/auth/login',
+      payload: {
         email: 'student@example.com',
         password: 'correct horse battery staple',
-      });
-    },
-  );
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({
+      access_token: 'signed-access-token',
+      refresh_token: 'rotating-refresh-token',
+    });
+    expect(signInWithPassword).toHaveBeenCalledWith({
+      email: 'student@example.com',
+      password: 'correct horse battery staple',
+    });
+  });
 
   it('returns a generic 401 when Supabase rejects the credentials', async () => {
     const supabaseResources = {
@@ -58,7 +55,7 @@ describe('password login', () => {
 
     const response = await app.inject({
       method: 'POST',
-      url: '/api/v1/auth/login',
+      url: '/auth/login',
       payload: {
         email: 'student@example.com',
         password: 'wrong-password',
@@ -87,7 +84,7 @@ describe('password login', () => {
 
     const response = await app.inject({
       method: 'POST',
-      url: '/api/v1/auth/login',
+      url: '/auth/login',
       payload: {
         email: 'student@example.com',
         password: 'correct horse battery staple',
@@ -114,7 +111,7 @@ describe('password login', () => {
 
     const response = await app.inject({
       method: 'POST',
-      url: '/api/v1/auth/login',
+      url: '/auth/login',
       payload: {
         email: 'student@example.com',
         password: 'correct horse battery staple',
@@ -148,7 +145,7 @@ describe('password login', () => {
 
     const response = await app.inject({
       method: 'POST',
-      url: '/api/v1/auth/login',
+      url: '/auth/login',
       payload: {
         email: 'student@example.com',
         password: 'correct horse battery staple',
@@ -176,7 +173,7 @@ describe('password login', () => {
 
     const response = await app.inject({
       method: 'POST',
-      url: '/api/v1/auth/login',
+      url: '/auth/login',
       payload: { email: 'student@example.com' },
     });
 
@@ -201,7 +198,7 @@ describe('password login', () => {
 
     const response = await app.inject({
       method: 'POST',
-      url: '/api/v1/auth/login',
+      url: '/auth/login',
       payload: { email: 'not-an-email', password: 'password' },
     });
 
@@ -225,7 +222,7 @@ describe('password login documentation', () => {
     expect(response.statusCode).toBe(200);
     expect(response.json()).toMatchObject({
       paths: {
-        '/api/v1/auth/login': {
+        '/auth/login': {
           post: {
             requestBody: {
               content: {

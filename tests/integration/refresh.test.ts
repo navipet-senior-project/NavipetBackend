@@ -24,7 +24,7 @@ describe('refresh', () => {
 
     const response = await app.inject({
       method: 'POST',
-      url: '/api/v1/auth/refresh',
+      url: '/auth/refresh',
       payload: { refreshToken: 'old-refresh-token' },
     });
 
@@ -47,7 +47,7 @@ describe('refresh', () => {
 
     const response = await app.inject({
       method: 'POST',
-      url: '/api/v1/auth/refresh',
+      url: '/auth/refresh',
       payload: { refreshToken: 'old-refresh-token' },
     });
 
@@ -63,7 +63,7 @@ describe('refresh', () => {
 
     const response = await app.inject({
       method: 'POST',
-      url: '/api/v1/auth/refresh',
+      url: '/auth/refresh',
       payload: { refreshToken: 'random-token' },
     });
 
@@ -82,7 +82,7 @@ describe('refresh', () => {
 
     const response = await app.inject({
       method: 'POST',
-      url: '/api/v1/auth/refresh',
+      url: '/auth/refresh',
       payload: { refreshToken: 'expired-token' },
     });
 
@@ -99,7 +99,7 @@ describe('refresh', () => {
 
     const response = await app.inject({
       method: 'POST',
-      url: '/api/v1/auth/refresh',
+      url: '/auth/refresh',
       payload: { refreshToken: 'consumed-token' },
     });
 
@@ -116,7 +116,7 @@ describe('refresh', () => {
 
     const response = await app.inject({
       method: 'POST',
-      url: '/api/v1/auth/refresh',
+      url: '/auth/refresh',
       payload: {},
     });
 
@@ -131,7 +131,7 @@ describe('refresh', () => {
 
     const response = await app.inject({
       method: 'POST',
-      url: '/api/v1/auth/refresh',
+      url: '/auth/refresh',
       payload: { refreshToken: 'some-token' },
     });
 
