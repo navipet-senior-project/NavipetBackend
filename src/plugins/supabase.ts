@@ -2,6 +2,8 @@ import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import type { FastifyPluginAsync } from 'fastify';
 import fp from 'fastify-plugin';
 
+import { AppError } from '../common/errors/app-error.js';
+import { ErrorCode } from '../common/errors/error-codes.js';
 import type { Environment } from '../config/env.js';
 
 const noSession = {
@@ -37,9 +39,50 @@ export interface PasswordLoginGateway {
   ): Promise<LoginTokens | null>;
 }
 
+export interface SignUpResult {
+  user: { id: string; email: string };
+  accessToken: string | null;
+  refreshToken: string | null;
+}
+
+export interface RegisterGateway {
+  signUp(credentials: PasswordCredentials): Promise<SignUpResult>;
+}
+
+export interface RefreshedTokens {
+  accessToken: string;
+  refreshToken: string;
+  userId: string;
+}
+
+export interface RefreshGateway {
+  refreshSession(refreshToken: string): Promise<RefreshedTokens>;
+}
+
+export type SignOutScope = 'local' | 'global';
+
+export interface SessionRevocationGateway {
+  adminSignOut(accessToken: string, scope: SignOutScope): Promise<void>;
+}
+
+export interface UserRecord {
+  id: string;
+  email: string;
+  status: 'ACTIVE' | 'DISABLED';
+  createdAt: string;
+}
+
+export interface UserLookupGateway {
+  getUserById(id: string): Promise<UserRecord | null>;
+}
+
 export interface SupabaseResources
   extends ClaimsGateway,
-    PasswordLoginGateway {
+    PasswordLoginGateway,
+    RegisterGateway,
+    RefreshGateway,
+    SessionRevocationGateway,
+    UserLookupGateway {
   publicClient: SupabaseClient;
   adminClient: SupabaseClient | null;
   forAccessToken(accessToken: string): SupabaseClient;
@@ -95,6 +138,75 @@ export function createSupabaseResources(config: Environment): SupabaseResources 
       return {
         accessToken: data.session.access_token,
         refreshToken: data.session.refresh_token,
+      };
+    },
+    async signUp(credentials) {
+      const signUpClient = createClient(
+        config.SUPABASE_URL,
+        config.SUPABASE_ANON_KEY,
+        noSession,
+      );
+      const { data, error } = await signUpClient.auth.signUp(credentials);
+      if (error !== null) throw error;
+      if (data.user === null) {
+        throw new Error('Supabase signUp did not return a user');
+      }
+      return {
+        user: { id: data.user.id, email: data.user.email ?? credentials.email },
+        accessToken: data.session?.access_token ?? null,
+        refreshToken: data.session?.refresh_token ?? null,
+      };
+    },
+    async refreshSession(refreshToken) {
+      const refreshClient = createClient(
+        config.SUPABASE_URL,
+        config.SUPABASE_ANON_KEY,
+        noSession,
+      );
+      const { data, error } = await refreshClient.auth.refreshSession({
+        refresh_token: refreshToken,
+      });
+      if (error !== null) throw error;
+      if (data.session === null) {
+        throw new Error('Supabase refreshSession did not return a session');
+      }
+      return {
+        accessToken: data.session.access_token,
+        refreshToken: data.session.refresh_token,
+        userId: data.session.user.id,
+      };
+    },
+    async adminSignOut(accessToken, scope) {
+      if (adminClient === null) {
+        throw new AppError({
+          code: ErrorCode.UPSTREAM_ERROR,
+          statusCode: 503,
+          message: 'Admin operations unavailable',
+        });
+      }
+      const { error } = await adminClient.auth.admin.signOut(accessToken, scope);
+      if (error !== null && error.code !== 'session_not_found') {
+        throw error;
+      }
+    },
+    async getUserById(id) {
+      if (adminClient === null) {
+        throw new AppError({
+          code: ErrorCode.UPSTREAM_ERROR,
+          statusCode: 503,
+          message: 'Admin operations unavailable',
+        });
+      }
+      const { data, error } = await adminClient.auth.admin.getUserById(id);
+      if (error !== null) {
+        if (error.code === 'user_not_found') return null;
+        throw error;
+      }
+      return {
+        id: data.user.id,
+        email: data.user.email ?? '',
+        status: data.user.banned_until === undefined ? 'ACTIVE' : 'DISABLED',
+        createdAt: data.user.created_at,
       };
     },
   };
