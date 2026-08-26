@@ -50,18 +50,24 @@ describe('auth route rate limits', () => {
       { supabaseResources },
     );
 
+    const payload = {
+      firstName: 'Elbee',
+      lastName: 'Shark',
+      email: 'student@example.com',
+      password: 'Password1!',
+    };
     const first = await app.inject({
       method: 'POST',
       url: '/auth/register',
-      payload: { email: 'student@example.com', password: 'a-long-user-password' },
+      payload,
     });
     const second = await app.inject({
       method: 'POST',
       url: '/auth/register',
-      payload: { email: 'student@example.com', password: 'a-long-user-password' },
+      payload,
     });
 
-    expect(first.statusCode).toBe(201);
+    expect(first.statusCode).toBe(200);
     expect(second.statusCode).toBe(429);
   });
 
