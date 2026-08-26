@@ -43,6 +43,9 @@ describe('signUp gateway', () => {
       resources.signUp({
         email: 'student@example.com',
         password: 'a-long-user-password',
+        firstName: 'Elbee',
+        lastName: 'Shark',
+        emailRedirectTo: 'navipet://auth-callback',
       }),
     ).resolves.toEqual({
       user: { id: baseUser.id, email: baseUser.email },
@@ -59,6 +62,9 @@ describe('signUp gateway', () => {
       resources.signUp({
         email: 'student@example.com',
         password: 'a-long-user-password',
+        firstName: 'Elbee',
+        lastName: 'Shark',
+        emailRedirectTo: 'navipet://auth-callback',
       }),
     ).resolves.toEqual({
       user: { id: baseUser.id, email: baseUser.email },
@@ -80,8 +86,55 @@ describe('signUp gateway', () => {
       resources.signUp({
         email: 'student@example.com',
         password: 'a-long-user-password',
+        firstName: 'Elbee',
+        lastName: 'Shark',
+        emailRedirectTo: 'navipet://auth-callback',
       }),
     ).rejects.toMatchObject({ code: 'email_exists' });
+  });
+
+  it('forwards first_name, last_name, and display_name metadata to Supabase', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+      jsonResponse(baseUser),
+    );
+    const resources = createSupabaseResources(TEST_ENV);
+
+    await resources.signUp({
+      email: 'student@example.com',
+      password: 'a-long-user-password',
+      firstName: 'Elbee',
+      lastName: 'Shark',
+      emailRedirectTo: 'navipet://auth-callback',
+    });
+
+    const [, init] = fetchSpy.mock.calls[0] as [string, RequestInit];
+    const body = JSON.parse(init.body as string) as {
+      data: { first_name: string; last_name: string; display_name: string };
+    };
+    expect(body.data).toEqual({
+      first_name: 'Elbee',
+      last_name: 'Shark',
+      display_name: 'Elbee Shark',
+    });
+  });
+
+  it('forwards emailRedirectTo as the redirect_to query parameter', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+      jsonResponse(baseUser),
+    );
+    const resources = createSupabaseResources(TEST_ENV);
+
+    await resources.signUp({
+      email: 'student@example.com',
+      password: 'a-long-user-password',
+      firstName: 'Elbee',
+      lastName: 'Shark',
+      emailRedirectTo: 'navipet://auth-callback',
+    });
+
+    const [url] = fetchSpy.mock.calls[0] as [string, RequestInit];
+    expect(url).toContain('redirect_to=');
+    expect(decodeURIComponent(url)).toContain('redirect_to=navipet://auth-callback');
   });
 });
 
