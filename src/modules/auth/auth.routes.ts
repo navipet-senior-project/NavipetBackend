@@ -310,9 +310,26 @@ const authRoutes: FastifyPluginCallbackTypebox = (fastify, _options, done) => {
 
   const forgotPasswordHandler = async (request: {
     body: { email: string };
-  }): Promise<{
-    message: 'If an account exists for this email, a verification code has been sent.';
-  }> => {
+  }): Promise<{ message: 'Verification code sent. Check your inbox.' }> => {
+    let userId: string | null;
+    try {
+      userId = await fastify.supabase.findUserIdByEmail(request.body.email);
+    } catch (cause) {
+      if (cause instanceof AppError) throw cause;
+      throw new AppError({
+        code: ErrorCode.UPSTREAM_ERROR,
+        statusCode: 502,
+        message: 'Supabase is unavailable.',
+        cause,
+      });
+    }
+    if (userId === null) {
+      throw new AppError({
+        code: ErrorCode.USER_NOT_FOUND,
+        statusCode: 404,
+        message: 'No account exists for this email.',
+      });
+    }
     try {
       await fastify.supabase.requestPasswordReset(request.body.email);
     } catch (cause) {
@@ -335,10 +352,7 @@ const authRoutes: FastifyPluginCallbackTypebox = (fastify, _options, done) => {
         cause,
       });
     }
-    return {
-      message:
-        'If an account exists for this email, a verification code has been sent.',
-    };
+    return { message: 'Verification code sent. Check your inbox.' };
   };
   const forgotPasswordOptions = {
     schema: ForgotPasswordRouteSchema,

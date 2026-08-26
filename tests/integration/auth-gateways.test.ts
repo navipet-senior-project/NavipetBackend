@@ -208,6 +208,80 @@ describe('adminSignOut gateway', () => {
   });
 });
 
+describe('findUserIdByEmail gateway', () => {
+  it('throws a 503 AppError when no service role key is configured', async () => {
+    const resources = createSupabaseResources(TEST_ENV);
+
+    await expect(
+      resources.findUserIdByEmail('student@example.com'),
+    ).rejects.toMatchObject({ statusCode: 503 });
+  });
+
+  it('returns the matching user id on the first page', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+      new Response(JSON.stringify({ users: [baseUser], aud: 'authenticated' }), {
+        status: 200,
+        headers: { 'content-type': 'application/json', 'x-total-count': '1' },
+      }),
+    );
+    const resources = createSupabaseResources({
+      ...TEST_ENV,
+      SUPABASE_SERVICE_ROLE_KEY: 'test-service-role-key',
+    });
+
+    await expect(resources.findUserIdByEmail('STUDENT@example.com')).resolves.toBe(
+      baseUser.id,
+    );
+  });
+
+  it('paginates when the account is not on the first page', async () => {
+    const otherUser = { ...baseUser, id: '22222222-2222-4222-8222-222222222222', email: 'other@example.com' };
+    const fetchSpy = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({ users: Array(1000).fill(otherUser), aud: 'authenticated' }),
+          {
+            status: 200,
+            headers: { 'content-type': 'application/json', 'x-total-count': '1001' },
+          },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ users: [baseUser], aud: 'authenticated' }), {
+          status: 200,
+          headers: { 'content-type': 'application/json', 'x-total-count': '1001' },
+        }),
+      );
+    const resources = createSupabaseResources({
+      ...TEST_ENV,
+      SUPABASE_SERVICE_ROLE_KEY: 'test-service-role-key',
+    });
+
+    await expect(resources.findUserIdByEmail('student@example.com')).resolves.toBe(
+      baseUser.id,
+    );
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
+  });
+
+  it('returns null once every page has been scanned without a match', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+      new Response(JSON.stringify({ users: [], aud: 'authenticated' }), {
+        status: 200,
+        headers: { 'content-type': 'application/json', 'x-total-count': '0' },
+      }),
+    );
+    const resources = createSupabaseResources({
+      ...TEST_ENV,
+      SUPABASE_SERVICE_ROLE_KEY: 'test-service-role-key',
+    });
+
+    await expect(
+      resources.findUserIdByEmail('nobody@example.com'),
+    ).resolves.toBeNull();
+  });
+});
+
 describe('requestPasswordReset gateway', () => {
   it('calls the recovery endpoint with the given email', async () => {
     const fetchSpy = vi

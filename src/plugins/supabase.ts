@@ -96,6 +96,10 @@ export interface UserLookupGateway {
   getUserById(id: string): Promise<UserRecord | null>;
 }
 
+export interface UserEmailLookupGateway {
+  findUserIdByEmail(email: string): Promise<string | null>;
+}
+
 export interface SupabaseResources
   extends ClaimsGateway,
     PasswordLoginGateway,
@@ -103,6 +107,7 @@ export interface SupabaseResources
     RefreshGateway,
     SessionRevocationGateway,
     UserLookupGateway,
+    UserEmailLookupGateway,
     PasswordResetRequestGateway,
     PasswordResetVerificationGateway,
     PasswordUpdateGateway {
@@ -221,6 +226,29 @@ export function createSupabaseResources(config: Environment): SupabaseResources 
       const { error } = await adminClient.auth.admin.signOut(accessToken, scope);
       if (error !== null && error.code !== 'session_not_found') {
         throw error;
+      }
+    },
+    async findUserIdByEmail(email) {
+      if (adminClient === null) {
+        throw new AppError({
+          code: ErrorCode.UPSTREAM_ERROR,
+          statusCode: 503,
+          message: 'Admin operations unavailable',
+        });
+      }
+      const normalized = email.toLowerCase();
+      const perPage = 1000;
+      for (let page = 1; ; page += 1) {
+        const { data, error } = await adminClient.auth.admin.listUsers({
+          page,
+          perPage,
+        });
+        if (error !== null) throw error;
+        const match = data.users.find(
+          (user) => (user.email ?? '').toLowerCase() === normalized,
+        );
+        if (match !== undefined) return match.id;
+        if (data.users.length < perPage) return null;
       }
     },
     async requestPasswordReset(email) {

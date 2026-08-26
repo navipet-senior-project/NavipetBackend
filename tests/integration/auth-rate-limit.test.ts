@@ -99,6 +99,9 @@ describe('auth route rate limits', () => {
   it('applies the stricter forgot-password rate limit before the global one', async () => {
     const supabaseResources = {
       ...createSupabaseResources(TEST_ENV),
+      findUserIdByEmail: vi
+        .fn()
+        .mockResolvedValue('11111111-1111-4111-8111-111111111111'),
       requestPasswordReset: vi.fn().mockResolvedValue(undefined),
     };
     app = await buildTestApp(

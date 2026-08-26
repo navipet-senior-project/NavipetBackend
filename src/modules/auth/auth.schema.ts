@@ -230,29 +230,34 @@ export const ForgotPasswordBodySchema = Type.Object(
 
 export const ForgotPasswordResponseSchema = Type.Object(
   {
-    message: Type.Literal(
-      'If an account exists for this email, a verification code has been sent.',
-    ),
+    message: Type.Literal('Verification code sent. Check your inbox.'),
   },
   {
     $id: 'ForgotPasswordResponse',
-    description:
-      'Always returned for a syntactically valid email, whether or not an ' +
-      'account exists, so the response cannot be used to discover which ' +
-      'accounts exist.',
+    description: 'A matching account was found and a verification code was sent.',
   },
 );
 
 export const ForgotPasswordRouteSchema = {
   tags: ['Authentication'],
   summary: 'Request a password reset verification code by email',
+  description:
+    'Reveals whether the email belongs to a registered account: 404 if it ' +
+    "does not. This is an intentional product choice, not this repo's " +
+    'default — most account-existence-revealing endpoints in this API ' +
+    '(e.g. /auth/login) deliberately return a generic response instead.',
   body: ForgotPasswordBodySchema,
   response: {
     200: ForgotPasswordResponseSchema,
     400: ErrorResponseSchema('Malformed JSON body.'),
+    404: ErrorResponseSchema('No account exists for this email.'),
     422: ErrorResponseSchema('Please enter a valid email address.'),
     429: ErrorResponseSchema('Too many password reset requests.'),
     502: ErrorResponseSchema('Supabase is unavailable.'),
+    503: ErrorResponseSchema(
+      'Password reset is unavailable (Supabase admin credentials not ' +
+        'configured).',
+    ),
   },
 };
 
