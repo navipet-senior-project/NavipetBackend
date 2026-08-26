@@ -216,3 +216,135 @@ export const MeRouteSchema = {
     ),
   },
 };
+
+export const ForgotPasswordBodySchema = Type.Object(
+  {
+    email: Type.String({
+      minLength: 1,
+      pattern: '^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$',
+      example: 'student@example.com',
+    }),
+  },
+  { additionalProperties: false },
+);
+
+export const ForgotPasswordResponseSchema = Type.Object(
+  {
+    message: Type.Literal('Verification code sent. Check your inbox.'),
+  },
+  {
+    $id: 'ForgotPasswordResponse',
+    description: 'A matching account was found and a verification code was sent.',
+  },
+);
+
+export const ForgotPasswordRouteSchema = {
+  tags: ['Authentication'],
+  summary: 'Request a password reset verification code by email',
+  description:
+    'Reveals whether the email belongs to a registered account: 404 if it ' +
+    "does not. This is an intentional product choice, not this repo's " +
+    'default — most account-existence-revealing endpoints in this API ' +
+    '(e.g. /auth/login) deliberately return a generic response instead.',
+  body: ForgotPasswordBodySchema,
+  response: {
+    200: ForgotPasswordResponseSchema,
+    400: ErrorResponseSchema('Malformed JSON body.'),
+    404: ErrorResponseSchema('No account exists for this email.'),
+    422: ErrorResponseSchema('Please enter a valid email address.'),
+    429: ErrorResponseSchema('Too many password reset requests.'),
+    502: ErrorResponseSchema('Supabase is unavailable.'),
+    503: ErrorResponseSchema(
+      'Password reset is unavailable (Supabase admin credentials not ' +
+        'configured).',
+    ),
+  },
+};
+
+export const VerifyResetCodeBodySchema = Type.Object(
+  {
+    email: Type.String({
+      minLength: 1,
+      pattern: '^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$',
+      example: 'student@example.com',
+    }),
+    code: Type.String({ pattern: '^[0-9]{6}$', example: '123456' }),
+  },
+  { additionalProperties: false },
+);
+
+export const ResetSessionResponseSchema = Type.Object(
+  {
+    access_token: Type.String({ minLength: 1 }),
+    refresh_token: Type.String({ minLength: 1 }),
+  },
+  {
+    $id: 'ResetSessionResponse',
+    description:
+      'A short-lived recovery session. Send the access_token as a bearer ' +
+      'credential to POST /auth/reset-password to set a new password.',
+  },
+);
+
+export const VerifyResetCodeRouteSchema = {
+  tags: ['Authentication'],
+  summary: 'Verify a password reset code and obtain a recovery session',
+  body: VerifyResetCodeBodySchema,
+  response: {
+    200: ResetSessionResponseSchema,
+    400: ErrorResponseSchema('Malformed JSON body.'),
+    401: ErrorResponseSchema(
+      'The code is missing, incorrect, or expired. The same response is ' +
+        'used for both cases so it cannot be used to discover a valid code.',
+    ),
+    422: ErrorResponseSchema('Email or code failed validation.'),
+    429: ErrorResponseSchema('Too many verification attempts.'),
+    502: ErrorResponseSchema('Supabase is unavailable.'),
+  },
+};
+
+const NewPasswordSchema = Type.String({
+  minLength: 8,
+  maxLength: 128,
+  pattern: '^(?=.*[A-Z])(?=.*[0-9]).{8,}$',
+  example: 'Password1',
+});
+
+export const ResetPasswordBodySchema = Type.Object(
+  {
+    newPassword: NewPasswordSchema,
+    confirmPassword: NewPasswordSchema,
+  },
+  { additionalProperties: false },
+);
+
+export const ResetPasswordRouteSchema = {
+  tags: ['Authentication'],
+  summary: 'Set a new password using a verified recovery session',
+  security: [{ bearerAuth: [] }],
+  body: ResetPasswordBodySchema,
+  response: {
+    204: {
+      description:
+        'Password reset. No response body. The recovery session used to ' +
+        'authenticate this request remains valid; call /auth/login to ' +
+        'obtain a fresh session as needed.',
+    },
+    400: ErrorResponseSchema('Malformed JSON body.'),
+    401: ErrorResponseSchema(
+      'The recovery access token is missing, invalid, or expired.',
+    ),
+    422: ErrorResponseSchema(
+      'newPassword/confirmPassword failed validation, either schema ' +
+        'validation (too short, missing an uppercase letter or a digit), ' +
+        "a mismatch between the two fields, or a Supabase-side check " +
+        '(e.g. the new password matches the previous one).',
+    ),
+    429: ErrorResponseSchema('Too many requests.'),
+    500: ErrorResponseSchema('Unexpected failure while resetting the password.'),
+    503: ErrorResponseSchema(
+      'Password reset is unavailable (Supabase admin credentials not ' +
+        'configured).',
+    ),
+  },
+};

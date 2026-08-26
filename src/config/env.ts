@@ -11,6 +11,10 @@ import {
   DEFAULT_AUTH_REGISTER_RATE_LIMIT_WINDOW,
   DEFAULT_AUTH_REFRESH_RATE_LIMIT_MAX,
   DEFAULT_AUTH_REFRESH_RATE_LIMIT_WINDOW,
+  DEFAULT_AUTH_FORGOT_PASSWORD_RATE_LIMIT_MAX,
+  DEFAULT_AUTH_FORGOT_PASSWORD_RATE_LIMIT_WINDOW,
+  DEFAULT_AUTH_VERIFY_RESET_CODE_RATE_LIMIT_MAX,
+  DEFAULT_AUTH_VERIFY_RESET_CODE_RATE_LIMIT_WINDOW,
 } from './constants.js';
 
 const HttpUrl = Type.String({ pattern: '^https?://[^\\s]+$' });
@@ -42,6 +46,10 @@ const EnvironmentSchema = Type.Object(
     AUTH_REGISTER_RATE_LIMIT_WINDOW: Type.String({ minLength: 1 }),
     AUTH_REFRESH_RATE_LIMIT_MAX: Type.Integer({ minimum: 1 }),
     AUTH_REFRESH_RATE_LIMIT_WINDOW: Type.String({ minLength: 1 }),
+    AUTH_FORGOT_PASSWORD_RATE_LIMIT_MAX: Type.Integer({ minimum: 1 }),
+    AUTH_FORGOT_PASSWORD_RATE_LIMIT_WINDOW: Type.String({ minLength: 1 }),
+    AUTH_VERIFY_RESET_CODE_RATE_LIMIT_MAX: Type.Integer({ minimum: 1 }),
+    AUTH_VERIFY_RESET_CODE_RATE_LIMIT_WINDOW: Type.String({ minLength: 1 }),
     DOCS_ENABLED: Type.Boolean(),
     SUPABASE_URL: HttpUrl,
     SUPABASE_ANON_KEY: Type.String({ minLength: 1 }),
@@ -162,6 +170,20 @@ export function parseEnv(input: RawEnvironment): Environment {
     AUTH_REFRESH_RATE_LIMIT_WINDOW:
       input.AUTH_REFRESH_RATE_LIMIT_WINDOW ??
       DEFAULT_AUTH_REFRESH_RATE_LIMIT_WINDOW,
+    AUTH_FORGOT_PASSWORD_RATE_LIMIT_MAX: parseInteger(
+      input.AUTH_FORGOT_PASSWORD_RATE_LIMIT_MAX,
+      DEFAULT_AUTH_FORGOT_PASSWORD_RATE_LIMIT_MAX,
+    ),
+    AUTH_FORGOT_PASSWORD_RATE_LIMIT_WINDOW:
+      input.AUTH_FORGOT_PASSWORD_RATE_LIMIT_WINDOW ??
+      DEFAULT_AUTH_FORGOT_PASSWORD_RATE_LIMIT_WINDOW,
+    AUTH_VERIFY_RESET_CODE_RATE_LIMIT_MAX: parseInteger(
+      input.AUTH_VERIFY_RESET_CODE_RATE_LIMIT_MAX,
+      DEFAULT_AUTH_VERIFY_RESET_CODE_RATE_LIMIT_MAX,
+    ),
+    AUTH_VERIFY_RESET_CODE_RATE_LIMIT_WINDOW:
+      input.AUTH_VERIFY_RESET_CODE_RATE_LIMIT_WINDOW ??
+      DEFAULT_AUTH_VERIFY_RESET_CODE_RATE_LIMIT_WINDOW,
     DOCS_ENABLED: parseOptionalBoolean(
       input.DOCS_ENABLED,
       nodeEnv !== 'production',
@@ -201,7 +223,9 @@ export function parseEnv(input: RawEnvironment): Environment {
       !isValidRateLimitWindow(parsed.RATE_LIMIT_WINDOW) ||
       !isValidRateLimitWindow(parsed.AUTH_LOGIN_RATE_LIMIT_WINDOW) ||
       !isValidRateLimitWindow(parsed.AUTH_REGISTER_RATE_LIMIT_WINDOW) ||
-      !isValidRateLimitWindow(parsed.AUTH_REFRESH_RATE_LIMIT_WINDOW)
+      !isValidRateLimitWindow(parsed.AUTH_REFRESH_RATE_LIMIT_WINDOW) ||
+      !isValidRateLimitWindow(parsed.AUTH_FORGOT_PASSWORD_RATE_LIMIT_WINDOW) ||
+      !isValidRateLimitWindow(parsed.AUTH_VERIFY_RESET_CODE_RATE_LIMIT_WINDOW)
     ) {
       throw new Error('Environment value failed semantic validation');
     }

@@ -95,4 +95,59 @@ describe('auth route rate limits', () => {
     expect(first.statusCode).toBe(401);
     expect(second.statusCode).toBe(429);
   });
+
+  it('applies the stricter forgot-password rate limit before the global one', async () => {
+    const supabaseResources = {
+      ...createSupabaseResources(TEST_ENV),
+      findUserIdByEmail: vi
+        .fn()
+        .mockResolvedValue('11111111-1111-4111-8111-111111111111'),
+      requestPasswordReset: vi.fn().mockResolvedValue(undefined),
+    };
+    app = await buildTestApp(
+      { AUTH_FORGOT_PASSWORD_RATE_LIMIT_MAX: 1, RATE_LIMIT_MAX: 100 },
+      { supabaseResources },
+    );
+
+    const payload = { email: 'student@example.com' };
+    const first = await app.inject({
+      method: 'POST',
+      url: '/auth/forgot-password',
+      payload,
+    });
+    const second = await app.inject({
+      method: 'POST',
+      url: '/auth/forgot-password',
+      payload,
+    });
+
+    expect(first.statusCode).toBe(200);
+    expect(second.statusCode).toBe(429);
+  });
+
+  it('applies the stricter verify-reset-code rate limit before the global one', async () => {
+    const supabaseResources = {
+      ...createSupabaseResources(TEST_ENV),
+      verifyPasswordResetCode: vi.fn().mockResolvedValue(null),
+    };
+    app = await buildTestApp(
+      { AUTH_VERIFY_RESET_CODE_RATE_LIMIT_MAX: 1, RATE_LIMIT_MAX: 100 },
+      { supabaseResources },
+    );
+
+    const payload = { email: 'student@example.com', code: '123456' };
+    const first = await app.inject({
+      method: 'POST',
+      url: '/auth/verify-reset-code',
+      payload,
+    });
+    const second = await app.inject({
+      method: 'POST',
+      url: '/auth/verify-reset-code',
+      payload,
+    });
+
+    expect(first.statusCode).toBe(401);
+    expect(second.statusCode).toBe(429);
+  });
 });

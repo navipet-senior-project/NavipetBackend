@@ -5,15 +5,29 @@ import { AppError } from '../../common/errors/app-error.js';
 import { ErrorCode } from '../../common/errors/error-codes.js';
 import type { AuthenticatedUser } from '../../plugins/auth.js';
 import {
+  ForgotPasswordRouteSchema,
   LoginRouteSchema,
   LogoutAllRouteSchema,
   LogoutRouteSchema,
   MeRouteSchema,
   RefreshRouteSchema,
   RegisterRouteSchema,
+  ResetPasswordRouteSchema,
+  VerifyResetCodeRouteSchema,
 } from './auth.schema.js';
 
 const authRoutes: FastifyPluginCallbackTypebox = (fastify, _options, done) => {
+  const normalizeEmailPreValidation = (request: FastifyRequest): Promise<void> => {
+    const body = request.body;
+    if (typeof body === 'object' && body !== null) {
+      const record = body as Record<string, unknown>;
+      if (typeof record.email === 'string') {
+        record.email = record.email.trim().toLowerCase();
+      }
+    }
+    return Promise.resolve();
+  };
+
   function requireAuthenticated(request: {
     user: AuthenticatedUser | null;
     accessToken: string | null;
@@ -293,6 +307,157 @@ const authRoutes: FastifyPluginCallbackTypebox = (fastify, _options, done) => {
   };
 
   fastify.get('/auth/me', meOptions, meHandler);
+
+  const forgotPasswordHandler = async (request: {
+    body: { email: string };
+  }): Promise<{ message: 'Verification code sent. Check your inbox.' }> => {
+    let userId: string | null;
+    try {
+      userId = await fastify.supabase.findUserIdByEmail(request.body.email);
+    } catch (cause) {
+      if (cause instanceof AppError) throw cause;
+      throw new AppError({
+        code: ErrorCode.UPSTREAM_ERROR,
+        statusCode: 502,
+        message: 'Supabase is unavailable.',
+        cause,
+      });
+    }
+    if (userId === null) {
+      throw new AppError({
+        code: ErrorCode.USER_NOT_FOUND,
+        statusCode: 404,
+        message: 'No account exists for this email.',
+      });
+    }
+    try {
+      await fastify.supabase.requestPasswordReset(request.body.email);
+    } catch (cause) {
+      const code = (cause as { code?: string }).code;
+      if (
+        code === 'over_email_send_rate_limit' ||
+        code === 'over_request_rate_limit'
+      ) {
+        throw new AppError({
+          code: ErrorCode.RATE_LIMITED,
+          statusCode: 429,
+          message: 'Too many password reset requests. Please try again later.',
+          cause,
+        });
+      }
+      throw new AppError({
+        code: ErrorCode.UPSTREAM_ERROR,
+        statusCode: 502,
+        message: 'Supabase is unavailable.',
+        cause,
+      });
+    }
+    return { message: 'Verification code sent. Check your inbox.' };
+  };
+  const forgotPasswordOptions = {
+    schema: ForgotPasswordRouteSchema,
+    preValidation: normalizeEmailPreValidation,
+    config: {
+      rateLimit: {
+        max: fastify.config.AUTH_FORGOT_PASSWORD_RATE_LIMIT_MAX,
+        timeWindow: fastify.config.AUTH_FORGOT_PASSWORD_RATE_LIMIT_WINDOW,
+      },
+    },
+  };
+
+  fastify.post('/auth/forgot-password', forgotPasswordOptions, forgotPasswordHandler);
+
+  const verifyResetCodeHandler = async (request: {
+    body: { email: string; code: string };
+  }): Promise<{ access_token: string; refresh_token: string }> => {
+    let tokens;
+    try {
+      tokens = await fastify.supabase.verifyPasswordResetCode(
+        request.body.email,
+        request.body.code,
+      );
+    } catch (cause) {
+      throw new AppError({
+        code: ErrorCode.UPSTREAM_ERROR,
+        statusCode: 502,
+        message: 'Supabase is unavailable.',
+        cause,
+      });
+    }
+    if (tokens === null) {
+      throw new AppError({
+        code: ErrorCode.INVALID_RESET_CODE,
+        statusCode: 401,
+        message: 'The verification code is incorrect or has expired.',
+      });
+    }
+    return { access_token: tokens.accessToken, refresh_token: tokens.refreshToken };
+  };
+  const verifyResetCodeOptions = {
+    schema: VerifyResetCodeRouteSchema,
+    preValidation: normalizeEmailPreValidation,
+    config: {
+      rateLimit: {
+        max: fastify.config.AUTH_VERIFY_RESET_CODE_RATE_LIMIT_MAX,
+        timeWindow: fastify.config.AUTH_VERIFY_RESET_CODE_RATE_LIMIT_WINDOW,
+      },
+    },
+  };
+
+  fastify.post('/auth/verify-reset-code', verifyResetCodeOptions, verifyResetCodeHandler);
+
+  const resetPasswordHandler = async (
+    request: {
+      user: AuthenticatedUser | null;
+      accessToken: string | null;
+      body: { newPassword: string; confirmPassword: string };
+    },
+    reply: FastifyReply,
+  ): Promise<void> => {
+    const { user } = requireAuthenticated(request);
+    if (request.body.newPassword !== request.body.confirmPassword) {
+      throw new AppError({
+        code: ErrorCode.VALIDATION_ERROR,
+        statusCode: 422,
+        message: 'Passwords do not match.',
+      });
+    }
+    try {
+      await fastify.supabase.updatePassword(user.id, request.body.newPassword);
+    } catch (cause) {
+      if (cause instanceof AppError) throw cause;
+      const code = (cause as { code?: string }).code;
+      if (code === 'same_password') {
+        throw new AppError({
+          code: ErrorCode.VALIDATION_ERROR,
+          statusCode: 422,
+          message: 'Your new password must be different from your previous password.',
+          cause,
+        });
+      }
+      if (code === 'weak_password') {
+        throw new AppError({
+          code: ErrorCode.VALIDATION_ERROR,
+          statusCode: 422,
+          message: 'Password does not meet the requirements.',
+          cause,
+        });
+      }
+      throw new AppError({
+        code: ErrorCode.INTERNAL_ERROR,
+        statusCode: 500,
+        message: 'Password reset failed',
+        cause,
+      });
+    }
+    reply.code(204);
+  };
+  const resetPasswordOptions = {
+    preHandler: fastify.authenticate,
+    schema: ResetPasswordRouteSchema,
+  };
+
+  fastify.post('/auth/reset-password', resetPasswordOptions, resetPasswordHandler);
 
   done();
 };

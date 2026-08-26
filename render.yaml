@@ -43,6 +43,14 @@ services:
         value: '30'
       - key: AUTH_REFRESH_RATE_LIMIT_WINDOW
         value: 1 minute
+      - key: AUTH_FORGOT_PASSWORD_RATE_LIMIT_MAX
+        value: '5'
+      - key: AUTH_FORGOT_PASSWORD_RATE_LIMIT_WINDOW
+        value: 1 hour
+      - key: AUTH_VERIFY_RESET_CODE_RATE_LIMIT_MAX
+        value: '10'
+      - key: AUTH_VERIFY_RESET_CODE_RATE_LIMIT_WINDOW
+        value: 15 minutes
       # Publicly exposes Swagger UI at /docs/. Set to false to keep the
       # OpenAPI document private in production.
       - key: DOCS_ENABLED
