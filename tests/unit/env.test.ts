@@ -7,6 +7,7 @@ const required = {
   SUPABASE_ANON_KEY: 'test-anon-key',
   SUPABASE_JWT_ISSUER: 'https://project-ref.supabase.co/auth/v1',
   SUPABASE_JWT_AUDIENCE: 'authenticated',
+  AUTH_EMAIL_REDIRECT_URL: 'navipet://auth-callback',
 };
 
 describe('parseEnv', () => {
@@ -123,6 +124,25 @@ describe('parseEnv', () => {
         SUPABASE_JWT_ISSUER: required.SUPABASE_JWT_ISSUER,
         SUPABASE_JWT_AUDIENCE: required.SUPABASE_JWT_AUDIENCE,
       }),
+    ).toThrow('Invalid environment configuration');
+  });
+
+  it('accepts the documented AUTH_EMAIL_REDIRECT_URL value', () => {
+    expect(parseEnv(required).AUTH_EMAIL_REDIRECT_URL).toBe(
+      'navipet://auth-callback',
+    );
+  });
+
+  it('rejects a missing AUTH_EMAIL_REDIRECT_URL', () => {
+    const { AUTH_EMAIL_REDIRECT_URL: _omit, ...withoutRedirect } = required;
+    expect(() => parseEnv(withoutRedirect)).toThrow(
+      'Invalid environment configuration',
+    );
+  });
+
+  it('rejects an AUTH_EMAIL_REDIRECT_URL that is not the documented value', () => {
+    expect(() =>
+      parseEnv({ ...required, AUTH_EMAIL_REDIRECT_URL: 'https://example.com' }),
     ).toThrow('Invalid environment configuration');
   });
 });

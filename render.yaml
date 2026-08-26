@@ -56,6 +56,8 @@ services:
         sync: false
       - key: SUPABASE_JWT_AUDIENCE
         value: authenticated
+      - key: AUTH_EMAIL_REDIRECT_URL
+        value: navipet://auth-callback
       - key: SUPABASE_SERVICE_ROLE_KEY
         sync: false
       - key: MULTISET_API_KEY

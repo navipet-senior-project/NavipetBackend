@@ -48,6 +48,7 @@ const EnvironmentSchema = Type.Object(
     SUPABASE_SERVICE_ROLE_KEY: Type.Optional(Type.String({ minLength: 1 })),
     SUPABASE_JWT_ISSUER: HttpUrl,
     SUPABASE_JWT_AUDIENCE: Type.String({ minLength: 1 }),
+    AUTH_EMAIL_REDIRECT_URL: Type.Literal('navipet://auth-callback'),
     MULTISET_API_KEY: Type.Optional(Type.String({ minLength: 1 })),
     MULTISET_API_BASE_URL: Type.Optional(HttpUrl),
     CORS_ORIGINS: Type.Array(HttpUrl),
@@ -169,6 +170,7 @@ export function parseEnv(input: RawEnvironment): Environment {
     SUPABASE_ANON_KEY: input.SUPABASE_ANON_KEY,
     SUPABASE_JWT_ISSUER: input.SUPABASE_JWT_ISSUER,
     SUPABASE_JWT_AUDIENCE: input.SUPABASE_JWT_AUDIENCE,
+    AUTH_EMAIL_REDIRECT_URL: input.AUTH_EMAIL_REDIRECT_URL,
     CORS_ORIGINS: (input.CORS_ORIGINS ?? '')
       .split(',')
       .map((origin) => origin.trim())
