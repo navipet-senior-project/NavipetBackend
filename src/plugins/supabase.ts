@@ -67,6 +67,18 @@ export interface RefreshGateway {
   refreshSession(refreshToken: string): Promise<RefreshedTokens>;
 }
 
+export interface PasswordResetRequestGateway {
+  requestPasswordReset(email: string): Promise<void>;
+}
+
+export interface PasswordResetVerificationGateway {
+  verifyPasswordResetCode(email: string, code: string): Promise<LoginTokens | null>;
+}
+
+export interface PasswordUpdateGateway {
+  updatePassword(userId: string, newPassword: string): Promise<void>;
+}
+
 export type SignOutScope = 'local' | 'global';
 
 export interface SessionRevocationGateway {
@@ -90,7 +102,10 @@ export interface SupabaseResources
     RegisterGateway,
     RefreshGateway,
     SessionRevocationGateway,
-    UserLookupGateway {
+    UserLookupGateway,
+    PasswordResetRequestGateway,
+    PasswordResetVerificationGateway,
+    PasswordUpdateGateway {
   publicClient: SupabaseClient;
   adminClient: SupabaseClient | null;
   forAccessToken(accessToken: string): SupabaseClient;
@@ -207,6 +222,41 @@ export function createSupabaseResources(config: Environment): SupabaseResources 
       if (error !== null && error.code !== 'session_not_found') {
         throw error;
       }
+    },
+    async requestPasswordReset(email) {
+      const { error } = await publicClient.auth.resetPasswordForEmail(email);
+      if (error !== null) throw error;
+    },
+    async verifyPasswordResetCode(email, code) {
+      const { data, error } = await publicClient.auth.verifyOtp({
+        email,
+        token: code,
+        type: 'recovery',
+      });
+      if (error !== null) {
+        if (error.code === 'otp_expired') return null;
+        throw error;
+      }
+      if (data.session === null) {
+        throw new Error('Supabase verifyOtp did not return a session');
+      }
+      return {
+        accessToken: data.session.access_token,
+        refreshToken: data.session.refresh_token,
+      };
+    },
+    async updatePassword(userId, newPassword) {
+      if (adminClient === null) {
+        throw new AppError({
+          code: ErrorCode.UPSTREAM_ERROR,
+          statusCode: 503,
+          message: 'Admin operations unavailable',
+        });
+      }
+      const { error } = await adminClient.auth.admin.updateUserById(userId, {
+        password: newPassword,
+      });
+      if (error !== null) throw error;
     },
     async getUserById(id) {
       if (adminClient === null) {

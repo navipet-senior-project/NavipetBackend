@@ -208,6 +208,122 @@ describe('adminSignOut gateway', () => {
   });
 });
 
+describe('requestPasswordReset gateway', () => {
+  it('calls the recovery endpoint with the given email', async () => {
+    const fetchSpy = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(jsonResponse({}));
+    const resources = createSupabaseResources(TEST_ENV);
+
+    await resources.requestPasswordReset('student@example.com');
+
+    const [url, init] = fetchSpy.mock.calls[0] as [string, RequestInit];
+    expect(url).toContain('/recover');
+    const body = JSON.parse(init.body as string) as { email: string };
+    expect(body.email).toBe('student@example.com');
+  });
+
+  it('throws the Supabase error code when rate limited', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+      jsonResponse(
+        { error_code: 'over_email_send_rate_limit', msg: 'Too many requests' },
+        429,
+      ),
+    );
+    const resources = createSupabaseResources(TEST_ENV);
+
+    await expect(
+      resources.requestPasswordReset('student@example.com'),
+    ).rejects.toMatchObject({ code: 'over_email_send_rate_limit' });
+  });
+});
+
+describe('verifyPasswordResetCode gateway', () => {
+  it('returns tokens on a correct code', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+      jsonResponse({
+        access_token: 'recovery-access-token',
+        token_type: 'bearer',
+        expires_in: 3600,
+        expires_at: 2_000_000_000,
+        refresh_token: 'recovery-refresh-token',
+        user: baseUser,
+      }),
+    );
+    const resources = createSupabaseResources(TEST_ENV);
+
+    await expect(
+      resources.verifyPasswordResetCode('student@example.com', '123456'),
+    ).resolves.toEqual({
+      accessToken: 'recovery-access-token',
+      refreshToken: 'recovery-refresh-token',
+    });
+  });
+
+  it('returns null when Supabase reports an expired or incorrect code', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+      jsonResponse({ error_code: 'otp_expired', msg: 'Token has expired or is invalid' }, 403),
+    );
+    const resources = createSupabaseResources(TEST_ENV);
+
+    await expect(
+      resources.verifyPasswordResetCode('student@example.com', '000000'),
+    ).resolves.toBeNull();
+  });
+
+  it('throws for an unexpected Supabase error code', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+      jsonResponse({ error_code: 'over_request_rate_limit', msg: 'Too many requests' }, 429),
+    );
+    const resources = createSupabaseResources(TEST_ENV);
+
+    await expect(
+      resources.verifyPasswordResetCode('student@example.com', '123456'),
+    ).rejects.toMatchObject({ code: 'over_request_rate_limit' });
+  });
+});
+
+describe('updatePassword gateway', () => {
+  it('throws a 503 AppError when no service role key is configured', async () => {
+    const resources = createSupabaseResources(TEST_ENV);
+
+    await expect(
+      resources.updatePassword(baseUser.id, 'Password1'),
+    ).rejects.toMatchObject({ statusCode: 503 });
+  });
+
+  it('sends the new password via the admin API', async () => {
+    const fetchSpy = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(jsonResponse({ user: baseUser }));
+    const resources = createSupabaseResources({
+      ...TEST_ENV,
+      SUPABASE_SERVICE_ROLE_KEY: 'test-service-role-key',
+    });
+
+    await resources.updatePassword(baseUser.id, 'Password1');
+
+    const [url, init] = fetchSpy.mock.calls[0] as [string, RequestInit];
+    expect(url).toContain(`/admin/users/${baseUser.id}`);
+    const body = JSON.parse(init.body as string) as { password: string };
+    expect(body.password).toBe('Password1');
+  });
+
+  it('throws the Supabase error code when the password matches the previous one', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+      jsonResponse({ error_code: 'same_password', msg: 'New password should be different' }, 422),
+    );
+    const resources = createSupabaseResources({
+      ...TEST_ENV,
+      SUPABASE_SERVICE_ROLE_KEY: 'test-service-role-key',
+    });
+
+    await expect(
+      resources.updatePassword(baseUser.id, 'Password1'),
+    ).rejects.toMatchObject({ code: 'same_password' });
+  });
+});
+
 describe('getUserById gateway', () => {
   it('returns ACTIVE status for a user with no ban', async () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(

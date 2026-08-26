@@ -109,11 +109,30 @@ describe('parseEnv', () => {
     expect(env.AUTH_REGISTER_RATE_LIMIT_WINDOW).toBe('1 hour');
     expect(env.AUTH_REFRESH_RATE_LIMIT_MAX).toBe(30);
     expect(env.AUTH_REFRESH_RATE_LIMIT_WINDOW).toBe('1 minute');
+    expect(env.AUTH_FORGOT_PASSWORD_RATE_LIMIT_MAX).toBe(5);
+    expect(env.AUTH_FORGOT_PASSWORD_RATE_LIMIT_WINDOW).toBe('1 hour');
+    expect(env.AUTH_VERIFY_RESET_CODE_RATE_LIMIT_MAX).toBe(10);
+    expect(env.AUTH_VERIFY_RESET_CODE_RATE_LIMIT_WINDOW).toBe('15 minutes');
   });
 
   it('rejects an invalid auth rate-limit window', () => {
     expect(() =>
       parseEnv({ ...required, AUTH_LOGIN_RATE_LIMIT_WINDOW: 'not-a-window' }),
+    ).toThrow('Invalid environment configuration');
+  });
+
+  it('rejects an invalid forgot-password/verify-reset-code rate-limit window', () => {
+    expect(() =>
+      parseEnv({
+        ...required,
+        AUTH_FORGOT_PASSWORD_RATE_LIMIT_WINDOW: 'not-a-window',
+      }),
+    ).toThrow('Invalid environment configuration');
+    expect(() =>
+      parseEnv({
+        ...required,
+        AUTH_VERIFY_RESET_CODE_RATE_LIMIT_WINDOW: 'not-a-window',
+      }),
     ).toThrow('Invalid environment configuration');
   });
 
