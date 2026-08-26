@@ -49,49 +49,63 @@ export const LoginRouteSchema = {
 
 export const RegisterBodySchema = Type.Object(
   {
+    firstName: Type.String({
+      minLength: 1,
+      maxLength: 50,
+      example: 'Elbee',
+    }),
+    lastName: Type.String({
+      minLength: 1,
+      maxLength: 50,
+      example: 'Shark',
+    }),
     email: Type.String({
       minLength: 1,
       pattern: '^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$',
       example: 'student@example.com',
     }),
     password: Type.String({
-      minLength: 12,
+      minLength: 8,
       maxLength: 128,
-      example: 'a-long-user-password',
+      pattern: '^(?=.*[0-9])(?=.*[^A-Za-z0-9]).*$',
+      example: 'Password1!',
     }),
   },
   { additionalProperties: false },
 );
 
-// Tokens are optional: if the Supabase project requires email
-// confirmation, registration succeeds but no session is issued yet.
-export const TokenResponseSchema = Type.Object(
+export const RegisterResponseSchema = Type.Object(
   {
-    access_token: Type.Optional(Type.String({ minLength: 1 })),
-    refresh_token: Type.Optional(Type.String({ minLength: 1 })),
+    message: Type.Literal('Confirmation email sent. Check your inbox.'),
+    confirmation_required: Type.Literal(true),
   },
   {
-    $id: 'TokenResponse',
+    $id: 'RegisterResponse',
     description:
-      'User created. Includes access and refresh tokens unless the ' +
-      'Supabase project requires email confirmation, in which case ' +
-      'both fields are omitted until the user confirms. Do not store ' +
-      'the refresh token in browser localStorage.',
+      'Registration accepted. Supabase requires email confirmation, so no ' +
+      'session or tokens are issued until the user confirms via the link ' +
+      'sent to their inbox.',
   },
 );
 
 export const RegisterRouteSchema = {
   tags: ['Authentication'],
-  summary: 'Register with email and password',
+  summary: 'Register with first name, last name, email, and password',
   description:
-    'Do not store the returned refresh token in browser localStorage. ' +
-    'Clients are responsible for secure token storage.',
+    'Never returns access or refresh tokens. The account remains ' +
+    'unconfirmed until the user follows the confirmation link emailed to ' +
+    'them.',
   body: RegisterBodySchema,
   response: {
-    201: TokenResponseSchema,
+    200: RegisterResponseSchema,
     400: ErrorResponseSchema('Malformed JSON body.'),
     409: ErrorResponseSchema('The normalized email is already registered.'),
-    422: ErrorResponseSchema('Email or password failed validation.'),
+    422: ErrorResponseSchema(
+      'firstName/lastName/email/password failed validation, either ' +
+        'schema validation (e.g. blank name, malformed email, password ' +
+        'missing a digit or special character) or a Supabase-side check ' +
+        '(e.g. weak_password).',
+    ),
     429: ErrorResponseSchema('Too many registration attempts.'),
     500: ErrorResponseSchema(
       'Unexpected failure while creating the account.',
