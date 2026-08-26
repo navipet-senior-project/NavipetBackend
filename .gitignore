@@ -13,3 +13,6 @@ coverage/
 .DS_Store
 .idea/
 .vscode/
+
+# Local agent planning artifacts
+docs/superpowers/plans/

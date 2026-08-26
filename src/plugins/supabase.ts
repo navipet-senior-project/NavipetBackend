@@ -28,6 +28,14 @@ export interface PasswordCredentials {
   password: string;
 }
 
+export interface SignUpCredentials {
+  email: string;
+  password: string;
+  firstName: string;
+  lastName: string;
+  emailRedirectTo: string;
+}
+
 export interface LoginTokens {
   accessToken: string;
   refreshToken: string;
@@ -46,7 +54,7 @@ export interface SignUpResult {
 }
 
 export interface RegisterGateway {
-  signUp(credentials: PasswordCredentials): Promise<SignUpResult>;
+  signUp(credentials: SignUpCredentials): Promise<SignUpResult>;
 }
 
 export interface RefreshedTokens {
@@ -146,7 +154,18 @@ export function createSupabaseResources(config: Environment): SupabaseResources 
         config.SUPABASE_ANON_KEY,
         noSession,
       );
-      const { data, error } = await signUpClient.auth.signUp(credentials);
+      const { data, error } = await signUpClient.auth.signUp({
+        email: credentials.email,
+        password: credentials.password,
+        options: {
+          data: {
+            first_name: credentials.firstName,
+            last_name: credentials.lastName,
+            display_name: `${credentials.firstName} ${credentials.lastName}`,
+          },
+          emailRedirectTo: credentials.emailRedirectTo,
+        },
+      });
       if (error !== null) throw error;
       if (data.user === null) {
         throw new Error('Supabase signUp did not return a user');

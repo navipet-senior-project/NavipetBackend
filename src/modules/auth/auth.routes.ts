@@ -1,5 +1,5 @@
 import type { FastifyPluginCallbackTypebox } from '@fastify/type-provider-typebox';
-import type { FastifyReply } from 'fastify';
+import type { FastifyReply, FastifyRequest } from 'fastify';
 
 import { AppError } from '../../common/errors/app-error.js';
 import { ErrorCode } from '../../common/errors/error-codes.js';
@@ -78,16 +78,41 @@ const authRoutes: FastifyPluginCallbackTypebox = (fastify, _options, done) => {
 
   fastify.post('/auth/login', loginOptions, loginHandler);
 
+  // Normalizes email/firstName/lastName before schema validation runs, so
+  // incidental surrounding whitespace does not trip the syntactic patterns
+  // and the values Supabase receives are already trimmed/lowercased.
+  const registerPreValidation = (request: FastifyRequest): Promise<void> => {
+    const body = request.body;
+    if (typeof body === 'object' && body !== null) {
+      const record = body as Record<string, unknown>;
+      if (typeof record.email === 'string') {
+        record.email = record.email.trim().toLowerCase();
+      }
+      if (typeof record.firstName === 'string') {
+        record.firstName = record.firstName.trim();
+      }
+      if (typeof record.lastName === 'string') {
+        record.lastName = record.lastName.trim();
+      }
+    }
+    return Promise.resolve();
+  };
+
   const registerHandler = async (
-    request: { body: { email: string; password: string } },
-    reply: FastifyReply,
-  ): Promise<{ access_token?: string; refresh_token?: string }> => {
-    const email = request.body.email.trim().toLowerCase();
-    let result;
+    request: {
+      body: { firstName: string; lastName: string; email: string; password: string };
+    },
+  ): Promise<{
+    message: 'Confirmation email sent. Check your inbox.';
+    confirmation_required: true;
+  }> => {
     try {
-      result = await fastify.supabase.signUp({
-        email,
+      await fastify.supabase.signUp({
+        email: request.body.email,
         password: request.body.password,
+        firstName: request.body.firstName,
+        lastName: request.body.lastName,
+        emailRedirectTo: fastify.config.AUTH_EMAIL_REDIRECT_URL,
       });
     } catch (cause) {
       const code = (cause as { code?: string }).code;
@@ -96,6 +121,17 @@ const authRoutes: FastifyPluginCallbackTypebox = (fastify, _options, done) => {
           code: ErrorCode.EMAIL_ALREADY_EXISTS,
           statusCode: 409,
           message: 'This email is already registered.',
+          cause,
+        });
+      }
+      if (
+        code === 'over_email_send_rate_limit' ||
+        code === 'over_request_rate_limit'
+      ) {
+        throw new AppError({
+          code: ErrorCode.RATE_LIMITED,
+          statusCode: 429,
+          message: 'Too many registration attempts. Please try again later.',
           cause,
         });
       }
@@ -114,14 +150,14 @@ const authRoutes: FastifyPluginCallbackTypebox = (fastify, _options, done) => {
         cause,
       });
     }
-    reply.code(201);
     return {
-      ...(result.accessToken === null ? {} : { access_token: result.accessToken }),
-      ...(result.refreshToken === null ? {} : { refresh_token: result.refreshToken }),
+      message: 'Confirmation email sent. Check your inbox.',
+      confirmation_required: true,
     };
   };
   const registerOptions = {
     schema: RegisterRouteSchema,
+    preValidation: registerPreValidation,
     config: {
       rateLimit: {
         max: fastify.config.AUTH_REGISTER_RATE_LIMIT_MAX,
