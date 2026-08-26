@@ -99,6 +99,17 @@ const authRoutes: FastifyPluginCallbackTypebox = (fastify, _options, done) => {
           cause,
         });
       }
+      if (
+        code === 'over_email_send_rate_limit' ||
+        code === 'over_request_rate_limit'
+      ) {
+        throw new AppError({
+          code: ErrorCode.RATE_LIMITED,
+          statusCode: 429,
+          message: 'Too many registration attempts. Please try again later.',
+          cause,
+        });
+      }
       if (code === 'weak_password' || code === 'validation_failed') {
         throw new AppError({
           code: ErrorCode.VALIDATION_ERROR,

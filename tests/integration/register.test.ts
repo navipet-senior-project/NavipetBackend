@@ -91,6 +91,26 @@ describe('registration', () => {
     expect(response.statusCode).toBe(409);
   });
 
+  it.each(['over_email_send_rate_limit', 'over_request_rate_limit'])(
+    'returns 429 RATE_LIMITED when Supabase reports %s',
+    async (code) => {
+      const signUp = vi.fn().mockRejectedValue({ code, message: 'rate limited' });
+      const supabaseResources = { ...createSupabaseResources(TEST_ENV), signUp };
+      app = await buildTestApp({}, { supabaseResources });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/auth/register',
+        payload: { email: 'student@example.com', password: 'a-long-user-password' },
+      });
+
+      expect(response.statusCode).toBe(429);
+      expect(response.json()).toEqual({
+        error: { code: 'RATE_LIMITED', message: anyString, requestId: anyString },
+      });
+    },
+  );
+
   it('returns 422 for an oversized password without calling Supabase', async () => {
     const signUp = vi.fn();
     const supabaseResources = { ...createSupabaseResources(TEST_ENV), signUp };
