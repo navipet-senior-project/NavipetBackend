@@ -134,10 +134,14 @@ describe('parseEnv', () => {
   });
 
   it('rejects a missing AUTH_EMAIL_REDIRECT_URL', () => {
-    const { AUTH_EMAIL_REDIRECT_URL: _omit, ...withoutRedirect } = required;
-    expect(() => parseEnv(withoutRedirect)).toThrow(
-      'Invalid environment configuration',
-    );
+    expect(() =>
+      parseEnv({
+        SUPABASE_URL: required.SUPABASE_URL,
+        SUPABASE_ANON_KEY: required.SUPABASE_ANON_KEY,
+        SUPABASE_JWT_ISSUER: required.SUPABASE_JWT_ISSUER,
+        SUPABASE_JWT_AUDIENCE: required.SUPABASE_JWT_AUDIENCE,
+      }),
+    ).toThrow('Invalid environment configuration');
   });
 
   it('rejects an AUTH_EMAIL_REDIRECT_URL that is not the documented value', () => {
