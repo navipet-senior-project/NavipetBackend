@@ -39,7 +39,6 @@ const REQUIRED_ENV = {
   SUPABASE_ANON_KEY: 'test-anon-key',
   SUPABASE_JWT_ISSUER: 'https://project-ref.supabase.co/auth/v1',
   SUPABASE_JWT_AUDIENCE: 'authenticated',
-  AUTH_EMAIL_REDIRECT_URL: 'navipet://auth-callback',
   CORS_ORIGINS: 'https://example.com',
 } as const;
 

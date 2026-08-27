@@ -125,25 +125,25 @@ describe('auth route rate limits', () => {
     expect(second.statusCode).toBe(429);
   });
 
-  it('applies the stricter verify-reset-code rate limit before the global one', async () => {
+  it('applies the stricter verify-otp rate limit before the global one', async () => {
     const supabaseResources = {
       ...createSupabaseResources(TEST_ENV),
-      verifyPasswordResetCode: vi.fn().mockResolvedValue(null),
+      verifyOtp: vi.fn().mockResolvedValue(null),
     };
     app = await buildTestApp(
-      { AUTH_VERIFY_RESET_CODE_RATE_LIMIT_MAX: 1, RATE_LIMIT_MAX: 100 },
+      { AUTH_VERIFY_OTP_RATE_LIMIT_MAX: 1, RATE_LIMIT_MAX: 100 },
       { supabaseResources },
     );
 
-    const payload = { email: 'student@example.com', code: '123456' };
+    const payload = { email: 'student@example.com', code: '123456', type: 'recovery' };
     const first = await app.inject({
       method: 'POST',
-      url: '/auth/verify-reset-code',
+      url: '/auth/verify-otp',
       payload,
     });
     const second = await app.inject({
       method: 'POST',
-      url: '/auth/verify-reset-code',
+      url: '/auth/verify-otp',
       payload,
     });
 

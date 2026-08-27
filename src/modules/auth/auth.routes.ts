@@ -13,7 +13,7 @@ import {
   RefreshRouteSchema,
   RegisterRouteSchema,
   ResetPasswordRouteSchema,
-  VerifyResetCodeRouteSchema,
+  VerifyOtpRouteSchema,
 } from './auth.schema.js';
 
 const authRoutes: FastifyPluginCallbackTypebox = (fastify, _options, done) => {
@@ -117,8 +117,8 @@ const authRoutes: FastifyPluginCallbackTypebox = (fastify, _options, done) => {
       body: { firstName: string; lastName: string; email: string; password: string };
     },
   ): Promise<{
-    message: 'Confirmation email sent. Check your inbox.';
-    confirmation_required: true;
+    message: 'Verification code sent. Check your inbox.';
+    otp_required: true;
   }> => {
     try {
       await fastify.supabase.signUp({
@@ -126,7 +126,6 @@ const authRoutes: FastifyPluginCallbackTypebox = (fastify, _options, done) => {
         password: request.body.password,
         firstName: request.body.firstName,
         lastName: request.body.lastName,
-        emailRedirectTo: fastify.config.AUTH_EMAIL_REDIRECT_URL,
       });
     } catch (cause) {
       const code = (cause as { code?: string }).code;
@@ -165,8 +164,8 @@ const authRoutes: FastifyPluginCallbackTypebox = (fastify, _options, done) => {
       });
     }
     return {
-      message: 'Confirmation email sent. Check your inbox.',
-      confirmation_required: true,
+      message: 'Verification code sent. Check your inbox.',
+      otp_required: true,
     };
   };
   const registerOptions = {
@@ -367,14 +366,18 @@ const authRoutes: FastifyPluginCallbackTypebox = (fastify, _options, done) => {
 
   fastify.post('/auth/forgot-password', forgotPasswordOptions, forgotPasswordHandler);
 
-  const verifyResetCodeHandler = async (request: {
-    body: { email: string; code: string };
-  }): Promise<{ access_token: string; refresh_token: string }> => {
-    let tokens;
+  const verifyOtpHandler = async (request: {
+    body: { email: string; code: string; type: 'recovery' | 'register' };
+  }): Promise<
+    | { access_token: string; refresh_token: string }
+    | { message: 'Email verified.' }
+  > => {
+    let result;
     try {
-      tokens = await fastify.supabase.verifyPasswordResetCode(
+      result = await fastify.supabase.verifyOtp(
         request.body.email,
         request.body.code,
+        request.body.type,
       );
     } catch (cause) {
       throw new AppError({
@@ -384,27 +387,33 @@ const authRoutes: FastifyPluginCallbackTypebox = (fastify, _options, done) => {
         cause,
       });
     }
-    if (tokens === null) {
+    if (result === null) {
       throw new AppError({
-        code: ErrorCode.INVALID_RESET_CODE,
+        code: ErrorCode.INVALID_OTP,
         statusCode: 401,
         message: 'The verification code is incorrect or has expired.',
       });
     }
-    return { access_token: tokens.accessToken, refresh_token: tokens.refreshToken };
+    if (result.type === 'register') {
+      return { message: 'Email verified.' };
+    }
+    return {
+      access_token: result.tokens.accessToken,
+      refresh_token: result.tokens.refreshToken,
+    };
   };
-  const verifyResetCodeOptions = {
-    schema: VerifyResetCodeRouteSchema,
+  const verifyOtpOptions = {
+    schema: VerifyOtpRouteSchema,
     preValidation: normalizeEmailPreValidation,
     config: {
       rateLimit: {
-        max: fastify.config.AUTH_VERIFY_RESET_CODE_RATE_LIMIT_MAX,
-        timeWindow: fastify.config.AUTH_VERIFY_RESET_CODE_RATE_LIMIT_WINDOW,
+        max: fastify.config.AUTH_VERIFY_OTP_RATE_LIMIT_MAX,
+        timeWindow: fastify.config.AUTH_VERIFY_OTP_RATE_LIMIT_WINDOW,
       },
     },
   };
 
-  fastify.post('/auth/verify-reset-code', verifyResetCodeOptions, verifyResetCodeHandler);
+  fastify.post('/auth/verify-otp', verifyOtpOptions, verifyOtpHandler);
 
   const resetPasswordHandler = async (
     request: {

@@ -33,7 +33,6 @@ export interface SignUpCredentials {
   password: string;
   firstName: string;
   lastName: string;
-  emailRedirectTo: string;
 }
 
 export interface LoginTokens {
@@ -71,8 +70,14 @@ export interface PasswordResetRequestGateway {
   requestPasswordReset(email: string): Promise<void>;
 }
 
-export interface PasswordResetVerificationGateway {
-  verifyPasswordResetCode(email: string, code: string): Promise<LoginTokens | null>;
+export type OtpType = 'recovery' | 'register';
+
+export type VerifyOtpResult =
+  | { type: 'recovery'; tokens: LoginTokens }
+  | { type: 'register' };
+
+export interface OtpVerificationGateway {
+  verifyOtp(email: string, code: string, type: OtpType): Promise<VerifyOtpResult | null>;
 }
 
 export interface PasswordUpdateGateway {
@@ -109,7 +114,7 @@ export interface SupabaseResources
     UserLookupGateway,
     UserEmailLookupGateway,
     PasswordResetRequestGateway,
-    PasswordResetVerificationGateway,
+    OtpVerificationGateway,
     PasswordUpdateGateway {
   publicClient: SupabaseClient;
   adminClient: SupabaseClient | null;
@@ -183,7 +188,6 @@ export function createSupabaseResources(config: Environment): SupabaseResources 
             last_name: credentials.lastName,
             display_name: `${credentials.firstName} ${credentials.lastName}`,
           },
-          emailRedirectTo: credentials.emailRedirectTo,
         },
       });
       if (error !== null) throw error;
@@ -255,22 +259,29 @@ export function createSupabaseResources(config: Environment): SupabaseResources 
       const { error } = await publicClient.auth.resetPasswordForEmail(email);
       if (error !== null) throw error;
     },
-    async verifyPasswordResetCode(email, code) {
+    async verifyOtp(email, code, type) {
+      // Supabase's own OTP type enum has no 'register' — 'signup' is its
+      // equivalent for a new-account confirmation code.
+      const supabaseType = type === 'register' ? 'signup' : type;
       const { data, error } = await publicClient.auth.verifyOtp({
         email,
         token: code,
-        type: 'recovery',
+        type: supabaseType,
       });
       if (error !== null) {
         if (error.code === 'otp_expired') return null;
         throw error;
       }
+      if (type === 'register') return { type };
       if (data.session === null) {
         throw new Error('Supabase verifyOtp did not return a session');
       }
       return {
-        accessToken: data.session.access_token,
-        refreshToken: data.session.refresh_token,
+        type,
+        tokens: {
+          accessToken: data.session.access_token,
+          refreshToken: data.session.refresh_token,
+        },
       };
     },
     async updatePassword(userId, newPassword) {

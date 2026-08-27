@@ -13,8 +13,8 @@ import {
   DEFAULT_AUTH_REFRESH_RATE_LIMIT_WINDOW,
   DEFAULT_AUTH_FORGOT_PASSWORD_RATE_LIMIT_MAX,
   DEFAULT_AUTH_FORGOT_PASSWORD_RATE_LIMIT_WINDOW,
-  DEFAULT_AUTH_VERIFY_RESET_CODE_RATE_LIMIT_MAX,
-  DEFAULT_AUTH_VERIFY_RESET_CODE_RATE_LIMIT_WINDOW,
+  DEFAULT_AUTH_VERIFY_OTP_RATE_LIMIT_MAX,
+  DEFAULT_AUTH_VERIFY_OTP_RATE_LIMIT_WINDOW,
 } from './constants.js';
 
 const HttpUrl = Type.String({ pattern: '^https?://[^\\s]+$' });
@@ -48,15 +48,14 @@ const EnvironmentSchema = Type.Object(
     AUTH_REFRESH_RATE_LIMIT_WINDOW: Type.String({ minLength: 1 }),
     AUTH_FORGOT_PASSWORD_RATE_LIMIT_MAX: Type.Integer({ minimum: 1 }),
     AUTH_FORGOT_PASSWORD_RATE_LIMIT_WINDOW: Type.String({ minLength: 1 }),
-    AUTH_VERIFY_RESET_CODE_RATE_LIMIT_MAX: Type.Integer({ minimum: 1 }),
-    AUTH_VERIFY_RESET_CODE_RATE_LIMIT_WINDOW: Type.String({ minLength: 1 }),
+    AUTH_VERIFY_OTP_RATE_LIMIT_MAX: Type.Integer({ minimum: 1 }),
+    AUTH_VERIFY_OTP_RATE_LIMIT_WINDOW: Type.String({ minLength: 1 }),
     DOCS_ENABLED: Type.Boolean(),
     SUPABASE_URL: HttpUrl,
     SUPABASE_ANON_KEY: Type.String({ minLength: 1 }),
     SUPABASE_SERVICE_ROLE_KEY: Type.Optional(Type.String({ minLength: 1 })),
     SUPABASE_JWT_ISSUER: HttpUrl,
     SUPABASE_JWT_AUDIENCE: Type.String({ minLength: 1 }),
-    AUTH_EMAIL_REDIRECT_URL: Type.Literal('navipet://auth-callback'),
     MULTISET_API_KEY: Type.Optional(Type.String({ minLength: 1 })),
     MULTISET_API_BASE_URL: Type.Optional(HttpUrl),
     CORS_ORIGINS: Type.Array(HttpUrl),
@@ -177,13 +176,13 @@ export function parseEnv(input: RawEnvironment): Environment {
     AUTH_FORGOT_PASSWORD_RATE_LIMIT_WINDOW:
       input.AUTH_FORGOT_PASSWORD_RATE_LIMIT_WINDOW ??
       DEFAULT_AUTH_FORGOT_PASSWORD_RATE_LIMIT_WINDOW,
-    AUTH_VERIFY_RESET_CODE_RATE_LIMIT_MAX: parseInteger(
-      input.AUTH_VERIFY_RESET_CODE_RATE_LIMIT_MAX,
-      DEFAULT_AUTH_VERIFY_RESET_CODE_RATE_LIMIT_MAX,
+    AUTH_VERIFY_OTP_RATE_LIMIT_MAX: parseInteger(
+      input.AUTH_VERIFY_OTP_RATE_LIMIT_MAX,
+      DEFAULT_AUTH_VERIFY_OTP_RATE_LIMIT_MAX,
     ),
-    AUTH_VERIFY_RESET_CODE_RATE_LIMIT_WINDOW:
-      input.AUTH_VERIFY_RESET_CODE_RATE_LIMIT_WINDOW ??
-      DEFAULT_AUTH_VERIFY_RESET_CODE_RATE_LIMIT_WINDOW,
+    AUTH_VERIFY_OTP_RATE_LIMIT_WINDOW:
+      input.AUTH_VERIFY_OTP_RATE_LIMIT_WINDOW ??
+      DEFAULT_AUTH_VERIFY_OTP_RATE_LIMIT_WINDOW,
     DOCS_ENABLED: parseOptionalBoolean(
       input.DOCS_ENABLED,
       nodeEnv !== 'production',
@@ -192,7 +191,6 @@ export function parseEnv(input: RawEnvironment): Environment {
     SUPABASE_ANON_KEY: input.SUPABASE_ANON_KEY,
     SUPABASE_JWT_ISSUER: input.SUPABASE_JWT_ISSUER,
     SUPABASE_JWT_AUDIENCE: input.SUPABASE_JWT_AUDIENCE,
-    AUTH_EMAIL_REDIRECT_URL: input.AUTH_EMAIL_REDIRECT_URL,
     CORS_ORIGINS: (input.CORS_ORIGINS ?? '')
       .split(',')
       .map((origin) => origin.trim())
@@ -225,7 +223,7 @@ export function parseEnv(input: RawEnvironment): Environment {
       !isValidRateLimitWindow(parsed.AUTH_REGISTER_RATE_LIMIT_WINDOW) ||
       !isValidRateLimitWindow(parsed.AUTH_REFRESH_RATE_LIMIT_WINDOW) ||
       !isValidRateLimitWindow(parsed.AUTH_FORGOT_PASSWORD_RATE_LIMIT_WINDOW) ||
-      !isValidRateLimitWindow(parsed.AUTH_VERIFY_RESET_CODE_RATE_LIMIT_WINDOW)
+      !isValidRateLimitWindow(parsed.AUTH_VERIFY_OTP_RATE_LIMIT_WINDOW)
     ) {
       throw new Error('Environment value failed semantic validation');
     }

@@ -43,8 +43,8 @@ describe('registration', () => {
 
     expect(response.statusCode).toBe(200);
     expect(response.json()).toEqual({
-      message: 'Confirmation email sent. Check your inbox.',
-      confirmation_required: true,
+      message: 'Verification code sent. Check your inbox.',
+      otp_required: true,
     });
   });
 
@@ -67,7 +67,7 @@ describe('registration', () => {
     );
   });
 
-  it('forwards firstName, lastName, and emailRedirectTo to the signUp gateway', async () => {
+  it('forwards firstName, lastName, email, and password to the signUp gateway', async () => {
     const signUp = vi.fn<RegisterGateway['signUp']>().mockResolvedValue({
       user: { id: '11111111-1111-4111-8111-111111111111', email: 'student@example.com' },
       accessToken: null,
@@ -86,7 +86,6 @@ describe('registration', () => {
       password: 'Password1!',
       firstName: 'Elbee',
       lastName: 'Shark',
-      emailRedirectTo: 'navipet://auth-callback',
     });
   });
 

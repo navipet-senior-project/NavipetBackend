@@ -7,7 +7,6 @@ const required = {
   SUPABASE_ANON_KEY: 'test-anon-key',
   SUPABASE_JWT_ISSUER: 'https://project-ref.supabase.co/auth/v1',
   SUPABASE_JWT_AUDIENCE: 'authenticated',
-  AUTH_EMAIL_REDIRECT_URL: 'navipet://auth-callback',
 };
 
 describe('parseEnv', () => {
@@ -111,8 +110,8 @@ describe('parseEnv', () => {
     expect(env.AUTH_REFRESH_RATE_LIMIT_WINDOW).toBe('1 minute');
     expect(env.AUTH_FORGOT_PASSWORD_RATE_LIMIT_MAX).toBe(5);
     expect(env.AUTH_FORGOT_PASSWORD_RATE_LIMIT_WINDOW).toBe('1 hour');
-    expect(env.AUTH_VERIFY_RESET_CODE_RATE_LIMIT_MAX).toBe(10);
-    expect(env.AUTH_VERIFY_RESET_CODE_RATE_LIMIT_WINDOW).toBe('15 minutes');
+    expect(env.AUTH_VERIFY_OTP_RATE_LIMIT_MAX).toBe(10);
+    expect(env.AUTH_VERIFY_OTP_RATE_LIMIT_WINDOW).toBe('15 minutes');
   });
 
   it('rejects an invalid auth rate-limit window', () => {
@@ -121,7 +120,7 @@ describe('parseEnv', () => {
     ).toThrow('Invalid environment configuration');
   });
 
-  it('rejects an invalid forgot-password/verify-reset-code rate-limit window', () => {
+  it('rejects an invalid forgot-password/verify-otp rate-limit window', () => {
     expect(() =>
       parseEnv({
         ...required,
@@ -131,7 +130,7 @@ describe('parseEnv', () => {
     expect(() =>
       parseEnv({
         ...required,
-        AUTH_VERIFY_RESET_CODE_RATE_LIMIT_WINDOW: 'not-a-window',
+        AUTH_VERIFY_OTP_RATE_LIMIT_WINDOW: 'not-a-window',
       }),
     ).toThrow('Invalid environment configuration');
   });
@@ -146,26 +145,4 @@ describe('parseEnv', () => {
     ).toThrow('Invalid environment configuration');
   });
 
-  it('accepts the documented AUTH_EMAIL_REDIRECT_URL value', () => {
-    expect(parseEnv(required).AUTH_EMAIL_REDIRECT_URL).toBe(
-      'navipet://auth-callback',
-    );
-  });
-
-  it('rejects a missing AUTH_EMAIL_REDIRECT_URL', () => {
-    expect(() =>
-      parseEnv({
-        SUPABASE_URL: required.SUPABASE_URL,
-        SUPABASE_ANON_KEY: required.SUPABASE_ANON_KEY,
-        SUPABASE_JWT_ISSUER: required.SUPABASE_JWT_ISSUER,
-        SUPABASE_JWT_AUDIENCE: required.SUPABASE_JWT_AUDIENCE,
-      }),
-    ).toThrow('Invalid environment configuration');
-  });
-
-  it('rejects an AUTH_EMAIL_REDIRECT_URL that is not the documented value', () => {
-    expect(() =>
-      parseEnv({ ...required, AUTH_EMAIL_REDIRECT_URL: 'https://example.com' }),
-    ).toThrow('Invalid environment configuration');
-  });
 });
