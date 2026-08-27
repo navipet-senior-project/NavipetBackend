@@ -36,7 +36,7 @@ services:
       - key: AUTH_LOGIN_RATE_LIMIT_WINDOW
         value: 1 minute
       - key: AUTH_REGISTER_RATE_LIMIT_MAX
-        value: '5'
+        value: '30'
       - key: AUTH_REGISTER_RATE_LIMIT_WINDOW
         value: 1 hour
       - key: AUTH_REFRESH_RATE_LIMIT_MAX

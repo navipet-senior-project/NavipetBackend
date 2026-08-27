@@ -104,7 +104,7 @@ describe('parseEnv', () => {
 
     expect(env.AUTH_LOGIN_RATE_LIMIT_MAX).toBe(10);
     expect(env.AUTH_LOGIN_RATE_LIMIT_WINDOW).toBe('1 minute');
-    expect(env.AUTH_REGISTER_RATE_LIMIT_MAX).toBe(5);
+    expect(env.AUTH_REGISTER_RATE_LIMIT_MAX).toBe(30);
     expect(env.AUTH_REGISTER_RATE_LIMIT_WINDOW).toBe('1 hour');
     expect(env.AUTH_REFRESH_RATE_LIMIT_MAX).toBe(30);
     expect(env.AUTH_REFRESH_RATE_LIMIT_WINDOW).toBe('1 minute');
