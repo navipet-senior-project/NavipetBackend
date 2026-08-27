@@ -29,6 +29,15 @@ export const LoginResponseSchema = Type.Object(
 export const LoginRouteSchema = {
   tags: ['Authentication'],
   summary: 'Sign in with email and password',
+  description:
+    'Entry point for an existing, confirmed account.\n\n' +
+    'On success, send the returned `access_token` as ' +
+    '`Authorization: Bearer <access_token>` on any protected route (e.g. ' +
+    '`GET /auth/me`).\n\n' +
+    'Hold onto `refresh_token` to call `POST /auth/refresh` once the ' +
+    'access token expires.\n\n' +
+    'An unconfirmed account (see `POST /auth/register`) cannot log in ' +
+    'until its OTP is verified.',
   body: LoginBodySchema,
   response: {
     200: LoginResponseSchema,
@@ -122,6 +131,14 @@ export const RefreshBodySchema = Type.Object(
 export const RefreshRouteSchema = {
   tags: ['Authentication'],
   summary: 'Rotate a refresh token for a new access/refresh pair',
+  description:
+    'Call this once the access token from `POST /auth/login` (or a prior ' +
+    '`/auth/refresh`) expires.\n\n' +
+    'Submits the current `refreshToken`; the response replaces both ' +
+    'tokens — the old refresh token is consumed and cannot be reused.\n\n' +
+    'Reusing an already-consumed refresh token revokes its entire token ' +
+    'family (401), so retry with the newest token only, never one already ' +
+    'exchanged.',
   body: RefreshBodySchema,
   response: {
     200: LoginResponseSchema,
@@ -139,6 +156,14 @@ export const RefreshRouteSchema = {
 export const LogoutRouteSchema = {
   tags: ['Authentication'],
   summary: 'Revoke the current session',
+  description:
+    'Requires `Authorization: Bearer <access_token>` from `/auth/login` ' +
+    'or `/auth/refresh`.\n\n' +
+    'Revokes only the refresh-token family tied to that access token — ' +
+    'other active sessions for the same user are unaffected.\n\n' +
+    'To test: log in, copy `access_token` into the "Authorize" button in ' +
+    'Swagger UI (or an `Authorization` header), then call this. A second ' +
+    'call with the same token still returns 204 (idempotent).',
   security: [{ bearerAuth: [] }],
   response: {
     204: {
@@ -163,6 +188,13 @@ export const LogoutRouteSchema = {
 export const LogoutAllRouteSchema = {
   tags: ['Authentication'],
   summary: 'Revoke every session for the authenticated user',
+  description:
+    'Requires `Authorization: Bearer <access_token>`.\n\n' +
+    'Unlike `/auth/logout`, this revokes every refresh session belonging ' +
+    'to the authenticated user across all devices — use it for "sign out ' +
+    'everywhere".\n\n' +
+    'After this call, every previously issued access/refresh pair for the ' +
+    'user stops working; a fresh `/auth/login` is required.',
   security: [{ bearerAuth: [] }],
   response: {
     204: {
@@ -203,6 +235,13 @@ export const MeResponseSchema = Type.Object(
 export const MeRouteSchema = {
   tags: ['Authentication'],
   summary: 'Get the authenticated user',
+  description:
+    'Requires `Authorization: Bearer <access_token>`.\n\n' +
+    'Use this to check whether a token is still valid and to read the ' +
+    'account it belongs to.\n\n' +
+    'Returns 403 if the account has since been disabled and 404 if the ' +
+    'account was deleted after the token was issued — both distinct from ' +
+    'the 401 returned for a bad/expired token itself.',
   security: [{ bearerAuth: [] }],
   response: {
     200: MeResponseSchema,
@@ -243,10 +282,15 @@ export const ForgotPasswordRouteSchema = {
   tags: ['Authentication'],
   summary: 'Request a password reset verification code by email',
   description:
+    'First step of the password recovery flow.\n\n' +
     'Reveals whether the email belongs to a registered account: 404 if it ' +
-    "does not. This is an intentional product choice, not this repo's " +
-    'default — most account-existence-revealing endpoints in this API ' +
-    '(e.g. /auth/login) deliberately return a generic response instead.',
+    "does not.\n\n" +
+    "This is an intentional product choice, not this repo's default — " +
+    'most account-existence-revealing endpoints in this API (e.g. ' +
+    '`/auth/login`) deliberately return a generic response instead.\n\n' +
+    'To test: submit an existing account\'s email, then check that inbox ' +
+    'for a 6-digit code and continue with `POST /auth/verify-otp` using ' +
+    '`type: "recovery"`.',
   body: ForgotPasswordBodySchema,
   response: {
     200: ForgotPasswordResponseSchema,
@@ -379,6 +423,16 @@ export const ResetPasswordBodySchema = Type.Object(
 export const ResetPasswordRouteSchema = {
   tags: ['Authentication'],
   summary: 'Set a new password using a verified recovery session',
+  description:
+    'Requires a recovery `access_token` as the Bearer credential — not a ' +
+    'normal login session.\n\n' +
+    '---\n\n' +
+    'To test: call `POST /auth/forgot-password`, then ' +
+    '`POST /auth/verify-otp` with `type: "recovery"`.\n\n' +
+    'That returns an `access_token` — use it here as the Bearer ' +
+    'credential, with matching `newPassword` / `confirmPassword`.\n\n' +
+    '---\n\n' +
+    'The new password must differ from the previous one.',
   security: [{ bearerAuth: [] }],
   body: ResetPasswordBodySchema,
   response: {
