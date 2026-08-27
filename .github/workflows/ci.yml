@@ -100,3 +100,51 @@ jobs:
             --request POST "$RENDER_DEPLOY_HOOK_URL"
           echo
           echo "Render deploy triggered for ${GITHUB_SHA}"
+
+      - name: Wait for Render deploy to finish
+        env:
+          RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+          RENDER_SERVICE_ID: ${{ vars.RENDER_SERVICE_ID }}
+        run: |
+          if [ -z "$RENDER_API_KEY" ] || [ -z "$RENDER_SERVICE_ID" ]; then
+            echo "::error::RENDER_API_KEY or RENDER_SERVICE_ID is not set"
+            exit 1
+          fi
+
+          echo "Waiting for Render to register the new deploy..."
+          deploy_id=""
+          for i in $(seq 1 10); do
+            sleep 5
+            deploy_id=$(curl --silent --fail \
+              --header "Authorization: Bearer $RENDER_API_KEY" \
+              "https://api.render.com/v1/services/$RENDER_SERVICE_ID/deploys?limit=1" \
+              | jq -r '.[0].deploy.id // empty')
+            [ -n "$deploy_id" ] && break
+          done
+
+          if [ -z "$deploy_id" ]; then
+            echo "::error::Could not find a Render deploy to track"
+            exit 1
+          fi
+          echo "Tracking Render deploy $deploy_id"
+
+          for i in $(seq 1 60); do
+            status=$(curl --silent --fail \
+              --header "Authorization: Bearer $RENDER_API_KEY" \
+              "https://api.render.com/v1/services/$RENDER_SERVICE_ID/deploys/$deploy_id" \
+              | jq -r '.status')
+            echo "Render deploy status: $status"
+            case "$status" in
+              live)
+                exit 0
+                ;;
+              *_failed|canceled|deactivated)
+                echo "::error::Render deploy failed with status $status"
+                exit 1
+                ;;
+            esac
+            sleep 15
+          done
+
+          echo "::error::Timed out waiting for Render deploy to finish"
+          exit 1
