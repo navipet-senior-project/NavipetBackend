@@ -45,7 +45,6 @@ describe('signUp gateway', () => {
         password: 'a-long-user-password',
         firstName: 'Elbee',
         lastName: 'Shark',
-        emailRedirectTo: 'navipet://auth-callback',
       }),
     ).resolves.toEqual({
       user: { id: baseUser.id, email: baseUser.email },
@@ -64,7 +63,6 @@ describe('signUp gateway', () => {
         password: 'a-long-user-password',
         firstName: 'Elbee',
         lastName: 'Shark',
-        emailRedirectTo: 'navipet://auth-callback',
       }),
     ).resolves.toEqual({
       user: { id: baseUser.id, email: baseUser.email },
@@ -88,7 +86,6 @@ describe('signUp gateway', () => {
         password: 'a-long-user-password',
         firstName: 'Elbee',
         lastName: 'Shark',
-        emailRedirectTo: 'navipet://auth-callback',
       }),
     ).rejects.toMatchObject({ code: 'email_exists' });
   });
@@ -104,7 +101,6 @@ describe('signUp gateway', () => {
       password: 'a-long-user-password',
       firstName: 'Elbee',
       lastName: 'Shark',
-      emailRedirectTo: 'navipet://auth-callback',
     });
 
     const [, init] = fetchSpy.mock.calls[0] as [string, RequestInit];
@@ -116,25 +112,6 @@ describe('signUp gateway', () => {
       last_name: 'Shark',
       display_name: 'Elbee Shark',
     });
-  });
-
-  it('forwards emailRedirectTo as the redirect_to query parameter', async () => {
-    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
-      jsonResponse(baseUser),
-    );
-    const resources = createSupabaseResources(TEST_ENV);
-
-    await resources.signUp({
-      email: 'student@example.com',
-      password: 'a-long-user-password',
-      firstName: 'Elbee',
-      lastName: 'Shark',
-      emailRedirectTo: 'navipet://auth-callback',
-    });
-
-    const [url] = fetchSpy.mock.calls[0] as [string, RequestInit];
-    expect(url).toContain('redirect_to=');
-    expect(decodeURIComponent(url)).toContain('redirect_to=navipet://auth-callback');
   });
 });
 
@@ -312,8 +289,8 @@ describe('requestPasswordReset gateway', () => {
   });
 });
 
-describe('verifyPasswordResetCode gateway', () => {
-  it('returns tokens on a correct code', async () => {
+describe('verifyOtp gateway', () => {
+  it('returns recovery tokens on a correct recovery code', async () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
       jsonResponse({
         access_token: 'recovery-access-token',
@@ -327,11 +304,32 @@ describe('verifyPasswordResetCode gateway', () => {
     const resources = createSupabaseResources(TEST_ENV);
 
     await expect(
-      resources.verifyPasswordResetCode('student@example.com', '123456'),
+      resources.verifyOtp('student@example.com', '123456', 'recovery'),
     ).resolves.toEqual({
-      accessToken: 'recovery-access-token',
-      refreshToken: 'recovery-refresh-token',
+      type: 'recovery',
+      tokens: {
+        accessToken: 'recovery-access-token',
+        refreshToken: 'recovery-refresh-token',
+      },
     });
+  });
+
+  it('returns a register confirmation on a correct register code', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+      jsonResponse({
+        access_token: 'register-access-token',
+        token_type: 'bearer',
+        expires_in: 3600,
+        expires_at: 2_000_000_000,
+        refresh_token: 'register-refresh-token',
+        user: baseUser,
+      }),
+    );
+    const resources = createSupabaseResources(TEST_ENV);
+
+    await expect(
+      resources.verifyOtp('student@example.com', '123456', 'register'),
+    ).resolves.toEqual({ type: 'register' });
   });
 
   it('returns null when Supabase reports an expired or incorrect code', async () => {
@@ -341,7 +339,7 @@ describe('verifyPasswordResetCode gateway', () => {
     const resources = createSupabaseResources(TEST_ENV);
 
     await expect(
-      resources.verifyPasswordResetCode('student@example.com', '000000'),
+      resources.verifyOtp('student@example.com', '000000', 'recovery'),
     ).resolves.toBeNull();
   });
 
@@ -352,7 +350,7 @@ describe('verifyPasswordResetCode gateway', () => {
     const resources = createSupabaseResources(TEST_ENV);
 
     await expect(
-      resources.verifyPasswordResetCode('student@example.com', '123456'),
+      resources.verifyOtp('student@example.com', '123456', 'recovery'),
     ).rejects.toMatchObject({ code: 'over_request_rate_limit' });
   });
 });

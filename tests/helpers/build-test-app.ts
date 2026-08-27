@@ -19,14 +19,13 @@ export const TEST_ENV: Environment = Object.freeze({
   AUTH_REFRESH_RATE_LIMIT_WINDOW: '1 minute',
   AUTH_FORGOT_PASSWORD_RATE_LIMIT_MAX: 5,
   AUTH_FORGOT_PASSWORD_RATE_LIMIT_WINDOW: '1 hour',
-  AUTH_VERIFY_RESET_CODE_RATE_LIMIT_MAX: 10,
-  AUTH_VERIFY_RESET_CODE_RATE_LIMIT_WINDOW: '15 minutes',
+  AUTH_VERIFY_OTP_RATE_LIMIT_MAX: 10,
+  AUTH_VERIFY_OTP_RATE_LIMIT_WINDOW: '15 minutes',
   DOCS_ENABLED: false,
   SUPABASE_URL: 'https://project-ref.supabase.co',
   SUPABASE_ANON_KEY: 'test-anon-key',
   SUPABASE_JWT_ISSUER: 'https://project-ref.supabase.co/auth/v1',
   SUPABASE_JWT_AUDIENCE: 'authenticated',
-  AUTH_EMAIL_REDIRECT_URL: 'navipet://auth-callback',
   CORS_ORIGINS: [],
 });
 

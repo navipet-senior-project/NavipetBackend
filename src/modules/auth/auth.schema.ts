@@ -76,15 +76,16 @@ export const RegisterBodySchema = Type.Object(
 
 export const RegisterResponseSchema = Type.Object(
   {
-    message: Type.Literal('Confirmation email sent. Check your inbox.'),
-    confirmation_required: Type.Literal(true),
+    message: Type.Literal('Verification code sent. Check your inbox.'),
+    otp_required: Type.Literal(true),
   },
   {
     $id: 'RegisterResponse',
     description:
       'Registration accepted. Supabase requires email confirmation, so no ' +
-      'session or tokens are issued until the user confirms via the link ' +
-      'sent to their inbox.',
+      'session or tokens are issued until the user submits the ' +
+      'verification code emailed to them to POST /auth/verify-otp ' +
+      "(type: 'register').",
   },
 );
 
@@ -93,8 +94,8 @@ export const RegisterRouteSchema = {
   summary: 'Register with first name, last name, email, and password',
   description:
     'Never returns access or refresh tokens. The account remains ' +
-    'unconfirmed until the user follows the confirmation link emailed to ' +
-    'them.',
+    'unconfirmed until the user verifies the code emailed to them via ' +
+    "POST /auth/verify-otp (type: 'register').",
   body: RegisterBodySchema,
   response: {
     200: RegisterResponseSchema,
@@ -261,7 +262,7 @@ export const ForgotPasswordRouteSchema = {
   },
 };
 
-export const VerifyResetCodeBodySchema = Type.Object(
+export const VerifyOtpBodySchema = Type.Object(
   {
     email: Type.String({
       minLength: 1,
@@ -269,8 +270,28 @@ export const VerifyResetCodeBodySchema = Type.Object(
       example: 'student@example.com',
     }),
     code: Type.String({ pattern: '^[0-9]{6}$', example: '123456' }),
+    type: Type.Union([Type.Literal('recovery'), Type.Literal('register')], {
+      description:
+        "'recovery' verifies a password reset code (from " +
+        "/auth/forgot-password); 'register' verifies an email confirmation " +
+        'code (from /auth/register).',
+    }),
   },
-  { additionalProperties: false },
+  {
+    additionalProperties: false,
+    'x-examples': {
+      recovery: {
+        summary: 'Password reset (type: recovery)',
+        description: 'Code sent by POST /auth/forgot-password.',
+        value: { email: 'student@example.com', code: '123456', type: 'recovery' },
+      },
+      register: {
+        summary: 'Signup confirmation (type: register)',
+        description: 'Code sent by POST /auth/register.',
+        value: { email: 'student@example.com', code: '123456', type: 'register' },
+      },
+    },
+  },
 );
 
 export const ResetSessionResponseSchema = Type.Object(
@@ -281,23 +302,60 @@ export const ResetSessionResponseSchema = Type.Object(
   {
     $id: 'ResetSessionResponse',
     description:
-      'A short-lived recovery session. Send the access_token as a bearer ' +
-      'credential to POST /auth/reset-password to set a new password.',
+      'A short-lived recovery session, returned for type: recovery. Send ' +
+      'the access_token as a bearer credential to POST /auth/reset-password ' +
+      'to set a new password.',
   },
 );
 
-export const VerifyResetCodeRouteSchema = {
+export const EmailVerifiedResponseSchema = Type.Object(
+  {
+    message: Type.Literal('Email verified.'),
+  },
+  {
+    $id: 'EmailVerifiedResponse',
+    description:
+      'Returned for type: register. The account is now confirmed; call ' +
+      '/auth/login to obtain a session.',
+  },
+);
+
+export const VerifyOtpRouteSchema = {
   tags: ['Authentication'],
-  summary: 'Verify a password reset code and obtain a recovery session',
-  body: VerifyResetCodeBodySchema,
+  summary: 'Verify a one-time code for password reset or signup email confirmation',
+  description:
+    'One endpoint, two independent flows selected by `type`. Use the ' +
+    '"Examples" dropdown on the request body below to load a sample ' +
+    'payload for either one.\n\n' +
+    '---\n\n' +
+    '### Password reset — `type: "recovery"`\n\n' +
+    '**Step 1.** `POST /auth/forgot-password` with `{ "email" }`.\n\n' +
+    '**Step 2.** Check that inbox for a 6-digit code.\n\n' +
+    '**Step 3.** `POST /auth/verify-otp` with ' +
+    '`{ "email", "code", "type": "recovery" }`.\n\n' +
+    '**Step 4.** On success this returns `access_token` / `refresh_token`. ' +
+    'Use the `access_token` as the Bearer credential on ' +
+    '`POST /auth/reset-password` to set a new password.\n\n' +
+    '---\n\n' +
+    '### Signup email confirmation — `type: "register"`\n\n' +
+    '**Step 1.** `POST /auth/register` with the new account details.\n\n' +
+    '**Step 2.** Check that inbox for a 6-digit code.\n\n' +
+    '**Step 3.** `POST /auth/verify-otp` with ' +
+    '`{ "email", "code", "type": "register" }`.\n\n' +
+    '**Step 4.** On success this returns `{ "message": "Email verified." }`. ' +
+    'The account is now confirmed — call `POST /auth/login` to sign in.\n\n' +
+    '---\n\n' +
+    'A wrong or expired code returns the same 401 for both flows, so the ' +
+    'response never reveals whether a code was ever valid.',
+  body: VerifyOtpBodySchema,
   response: {
-    200: ResetSessionResponseSchema,
+    200: Type.Union([ResetSessionResponseSchema, EmailVerifiedResponseSchema]),
     400: ErrorResponseSchema('Malformed JSON body.'),
     401: ErrorResponseSchema(
       'The code is missing, incorrect, or expired. The same response is ' +
         'used for both cases so it cannot be used to discover a valid code.',
     ),
-    422: ErrorResponseSchema('Email or code failed validation.'),
+    422: ErrorResponseSchema('Email, code, or type failed validation.'),
     429: ErrorResponseSchema('Too many verification attempts.'),
     502: ErrorResponseSchema('Supabase is unavailable.'),
   },
