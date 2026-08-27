@@ -16,3 +16,6 @@ coverage/
 
 # Local agent planning artifacts
 docs/superpowers/plans/
+.agents/
+.mcp.json
+skills-lock.json
