@@ -306,7 +306,6 @@ describe('verifyOtp gateway', () => {
     await expect(
       resources.verifyOtp('student@example.com', '123456', 'recovery'),
     ).resolves.toEqual({
-      type: 'recovery',
       tokens: {
         accessToken: 'recovery-access-token',
         refreshToken: 'recovery-refresh-token',
@@ -314,7 +313,7 @@ describe('verifyOtp gateway', () => {
     });
   });
 
-  it('returns a register confirmation on a correct register code', async () => {
+  it('returns login tokens on a correct register code', async () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
       jsonResponse({
         access_token: 'register-access-token',
@@ -329,7 +328,12 @@ describe('verifyOtp gateway', () => {
 
     await expect(
       resources.verifyOtp('student@example.com', '123456', 'register'),
-    ).resolves.toEqual({ type: 'register' });
+    ).resolves.toEqual({
+      tokens: {
+        accessToken: 'register-access-token',
+        refreshToken: 'register-refresh-token',
+      },
+    });
   });
 
   it('returns null when Supabase reports an expired or incorrect code', async () => {

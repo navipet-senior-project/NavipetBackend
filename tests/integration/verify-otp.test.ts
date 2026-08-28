@@ -32,7 +32,6 @@ describe('verify otp', () => {
     const verifyOtp = vi
       .fn<OtpVerificationGateway['verifyOtp']>()
       .mockResolvedValue({
-        type: 'recovery',
         tokens: { accessToken: 'recovery-access-token', refreshToken: 'recovery-refresh-token' },
       });
     app = await buildAppWithVerifyOtp(verifyOtp);
@@ -51,10 +50,12 @@ describe('verify otp', () => {
     expect(verifyOtp).toHaveBeenCalledWith('student@example.com', '123456', 'recovery');
   });
 
-  it('returns an email-verified message for a correct register code', async () => {
+  it('returns a login session for a correct register code', async () => {
     const verifyOtp = vi
       .fn<OtpVerificationGateway['verifyOtp']>()
-      .mockResolvedValue({ type: 'register' });
+      .mockResolvedValue({
+        tokens: { accessToken: 'register-access-token', refreshToken: 'register-refresh-token' },
+      });
     app = await buildAppWithVerifyOtp(verifyOtp);
 
     const response = await app.inject({
@@ -64,7 +65,10 @@ describe('verify otp', () => {
     });
 
     expect(response.statusCode).toBe(200);
-    expect(response.json()).toEqual({ message: 'Email verified.' });
+    expect(response.json()).toEqual({
+      access_token: 'register-access-token',
+      refresh_token: 'register-refresh-token',
+    });
     expect(verifyOtp).toHaveBeenCalledWith('student@example.com', '123456', 'register');
   });
 
@@ -72,7 +76,6 @@ describe('verify otp', () => {
     const verifyOtp = vi
       .fn<OtpVerificationGateway['verifyOtp']>()
       .mockResolvedValue({
-        type: 'recovery',
         tokens: { accessToken: 'a', refreshToken: 'b' },
       });
     app = await buildAppWithVerifyOtp(verifyOtp);
