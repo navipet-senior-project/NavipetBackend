@@ -338,29 +338,19 @@ export const VerifyOtpBodySchema = Type.Object(
   },
 );
 
-export const ResetSessionResponseSchema = Type.Object(
+export const VerifyOtpSessionResponseSchema = Type.Object(
   {
     access_token: Type.String({ minLength: 1 }),
     refresh_token: Type.String({ minLength: 1 }),
   },
   {
-    $id: 'ResetSessionResponse',
+    $id: 'VerifyOtpSessionResponse',
     description:
-      'A short-lived recovery session, returned for type: recovery. Send ' +
-      'the access_token as a bearer credential to POST /auth/reset-password ' +
-      'to set a new password.',
-  },
-);
-
-export const EmailVerifiedResponseSchema = Type.Object(
-  {
-    message: Type.Literal('Email verified.'),
-  },
-  {
-    $id: 'EmailVerifiedResponse',
-    description:
-      'Returned for type: register. The account is now confirmed; call ' +
-      '/auth/login to obtain a session.',
+      'A session for the verified account. For type: recovery this is a ' +
+      'short-lived recovery session — send the access_token as a bearer ' +
+      'credential to POST /auth/reset-password to set a new password. For ' +
+      'type: register this is a normal login session — the account is now ' +
+      'confirmed and signed in.',
   },
 );
 
@@ -386,14 +376,15 @@ export const VerifyOtpRouteSchema = {
     '**Step 2.** Check that inbox for a 6-digit code.\n\n' +
     '**Step 3.** `POST /auth/verify-otp` with ' +
     '`{ "email", "code", "type": "register" }`.\n\n' +
-    '**Step 4.** On success this returns `{ "message": "Email verified." }`. ' +
-    'The account is now confirmed — call `POST /auth/login` to sign in.\n\n' +
+    '**Step 4.** On success this returns `access_token` / `refresh_token` — ' +
+    'the account is now confirmed and this is a normal login session, no ' +
+    'separate `POST /auth/login` call needed.\n\n' +
     '---\n\n' +
     'A wrong or expired code returns the same 401 for both flows, so the ' +
     'response never reveals whether a code was ever valid.',
   body: VerifyOtpBodySchema,
   response: {
-    200: Type.Union([ResetSessionResponseSchema, EmailVerifiedResponseSchema]),
+    200: VerifyOtpSessionResponseSchema,
     400: ErrorResponseSchema('Malformed JSON body.'),
     401: ErrorResponseSchema(
       'The code is missing, incorrect, or expired. The same response is ' +
