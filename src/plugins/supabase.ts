@@ -72,9 +72,9 @@ export interface PasswordResetRequestGateway {
 
 export type OtpType = 'recovery' | 'register';
 
-export type VerifyOtpResult =
-  | { type: 'recovery'; tokens: LoginTokens }
-  | { type: 'register' };
+export interface VerifyOtpResult {
+  tokens: LoginTokens;
+}
 
 export interface OtpVerificationGateway {
   verifyOtp(email: string, code: string, type: OtpType): Promise<VerifyOtpResult | null>;
@@ -272,12 +272,10 @@ export function createSupabaseResources(config: Environment): SupabaseResources 
         if (error.code === 'otp_expired') return null;
         throw error;
       }
-      if (type === 'register') return { type };
       if (data.session === null) {
         throw new Error('Supabase verifyOtp did not return a session');
       }
       return {
-        type,
         tokens: {
           accessToken: data.session.access_token,
           refreshToken: data.session.refresh_token,

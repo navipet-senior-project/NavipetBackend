@@ -368,10 +368,7 @@ const authRoutes: FastifyPluginCallbackTypebox = (fastify, _options, done) => {
 
   const verifyOtpHandler = async (request: {
     body: { email: string; code: string; type: 'recovery' | 'register' };
-  }): Promise<
-    | { access_token: string; refresh_token: string }
-    | { message: 'Email verified.' }
-  > => {
+  }): Promise<{ access_token: string; refresh_token: string }> => {
     let result;
     try {
       result = await fastify.supabase.verifyOtp(
@@ -393,9 +390,6 @@ const authRoutes: FastifyPluginCallbackTypebox = (fastify, _options, done) => {
         statusCode: 401,
         message: 'The verification code is incorrect or has expired.',
       });
-    }
-    if (result.type === 'register') {
-      return { message: 'Email verified.' };
     }
     return {
       access_token: result.tokens.accessToken,
