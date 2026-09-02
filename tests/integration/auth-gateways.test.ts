@@ -360,43 +360,63 @@ describe('verifyOtp gateway', () => {
 });
 
 describe('updatePassword gateway', () => {
-  it('throws a 503 AppError when no service role key is configured', async () => {
+  it('updates the password through the authenticated recovery session', async () => {
+    const fetchSpy = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(jsonResponse({ user: baseUser }));
     const resources = createSupabaseResources(TEST_ENV);
 
-    await expect(
-      resources.updatePassword(baseUser.id, 'Password1'),
-    ).rejects.toMatchObject({ statusCode: 503 });
+    await resources.updatePassword('recovery-access-token', 'Password1');
+
+    const [url, init] = fetchSpy.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe(`${TEST_ENV.SUPABASE_URL}/auth/v1/user`);
+    expect(init.method).toBe('PUT');
+    const headers = new Headers(init.headers);
+    expect(headers.get('authorization')).toBe('Bearer recovery-access-token');
+    expect(headers.get('apikey')).toBe(TEST_ENV.SUPABASE_ANON_KEY);
+    expect(headers.get('content-type')).toBe('application/json');
+    const body = JSON.parse(init.body as string) as { password: string };
+    expect(body.password).toBe('Password1');
   });
 
-  it('sends the new password via the admin API', async () => {
+  it('normalizes a trailing slash in the Supabase URL', async () => {
     const fetchSpy = vi
       .spyOn(globalThis, 'fetch')
       .mockResolvedValueOnce(jsonResponse({ user: baseUser }));
     const resources = createSupabaseResources({
       ...TEST_ENV,
-      SUPABASE_SERVICE_ROLE_KEY: 'test-service-role-key',
+      SUPABASE_URL: `${TEST_ENV.SUPABASE_URL}/`,
     });
 
-    await resources.updatePassword(baseUser.id, 'Password1');
+    await resources.updatePassword('recovery-access-token', 'Password1');
 
-    const [url, init] = fetchSpy.mock.calls[0] as [string, RequestInit];
-    expect(url).toContain(`/admin/users/${baseUser.id}`);
-    const body = JSON.parse(init.body as string) as { password: string };
-    expect(body.password).toBe('Password1');
+    const [url] = fetchSpy.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe(`${TEST_ENV.SUPABASE_URL}/auth/v1/user`);
   });
 
   it('throws the Supabase error code when the password matches the previous one', async () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
       jsonResponse({ error_code: 'same_password', msg: 'New password should be different' }, 422),
     );
-    const resources = createSupabaseResources({
-      ...TEST_ENV,
-      SUPABASE_SERVICE_ROLE_KEY: 'test-service-role-key',
-    });
+    const resources = createSupabaseResources(TEST_ENV);
 
     await expect(
-      resources.updatePassword(baseUser.id, 'Password1'),
+      resources.updatePassword('recovery-access-token', 'Password1'),
     ).rejects.toMatchObject({ code: 'same_password' });
+  });
+
+  it('preserves status context for a non-JSON upstream error', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+      new Response('', { status: 502, statusText: 'Bad Gateway' }),
+    );
+    const resources = createSupabaseResources(TEST_ENV);
+
+    await expect(
+      resources.updatePassword('recovery-access-token', 'Password1'),
+    ).rejects.toMatchObject({
+      message: 'Bad Gateway',
+      status: 502,
+    });
   });
 });
 

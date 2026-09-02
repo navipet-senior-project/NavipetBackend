@@ -21,6 +21,17 @@ const ClaimsSchema = Type.Object(
     iss: Type.String(),
     aud: Type.Union([Type.String(), Type.Array(Type.String())]),
     exp: Type.Number(),
+    amr: Type.Optional(
+      Type.Array(
+        Type.Object(
+          {
+            method: Type.String(),
+            timestamp: Type.Number(),
+          },
+          { additionalProperties: true },
+        ),
+      ),
+    ),
   },
   { additionalProperties: true },
 );
@@ -30,6 +41,7 @@ const ClaimsValidator = Schema.Compile(ClaimsSchema);
 export interface AuthenticatedUser {
   id: string;
   email?: string;
+  authenticationMethods?: string[];
 }
 
 export interface JwtVerifier {
@@ -71,6 +83,11 @@ export class SupabaseJwtVerifier implements JwtVerifier {
       return {
         id: claims.sub,
         ...(claims.email === undefined ? {} : { email: claims.email }),
+        ...(claims.amr === undefined
+          ? {}
+          : {
+              authenticationMethods: claims.amr.map((entry) => entry.method),
+            }),
       };
     } catch (cause) {
       throw unauthorized(cause);

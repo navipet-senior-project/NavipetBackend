@@ -1,4 +1,8 @@
-import { createClient, type SupabaseClient } from '@supabase/supabase-js';
+import {
+  AuthApiError,
+  createClient,
+  type SupabaseClient,
+} from '@supabase/supabase-js';
 import type { FastifyPluginAsync } from 'fastify';
 import fp from 'fastify-plugin';
 
@@ -81,7 +85,7 @@ export interface OtpVerificationGateway {
 }
 
 export interface PasswordUpdateGateway {
-  updatePassword(userId: string, newPassword: string): Promise<void>;
+  updatePassword(accessToken: string, newPassword: string): Promise<void>;
 }
 
 export type SignOutScope = 'local' | 'global';
@@ -282,18 +286,51 @@ export function createSupabaseResources(config: Environment): SupabaseResources 
         },
       };
     },
-    async updatePassword(userId, newPassword) {
-      if (adminClient === null) {
-        throw new AppError({
-          code: ErrorCode.UPSTREAM_ERROR,
-          statusCode: 503,
-          message: 'Admin operations unavailable',
-        });
+    async updatePassword(accessToken, newPassword) {
+      const response = await fetch(
+        new URL('/auth/v1/user', config.SUPABASE_URL).toString(),
+        {
+          method: 'PUT',
+          headers: {
+            apikey: config.SUPABASE_ANON_KEY,
+            authorization: `Bearer ${accessToken}`,
+            'content-type': 'application/json',
+          },
+          body: JSON.stringify({ password: newPassword }),
+        },
+      );
+      if (!response.ok) {
+        let body: {
+          code?: unknown;
+          error?: unknown;
+          error_code?: unknown;
+          error_description?: unknown;
+          message?: unknown;
+          msg?: unknown;
+        } = {};
+        try {
+          body = (await response.json()) as typeof body;
+        } catch {
+          // Proxies can return an empty or non-JSON error response.
+        }
+        const code =
+          typeof body.code === 'string'
+            ? body.code
+            : typeof body.error_code === 'string'
+              ? body.error_code
+              : undefined;
+        const message =
+          typeof body.msg === 'string'
+            ? body.msg
+            : typeof body.message === 'string'
+              ? body.message
+              : typeof body.error_description === 'string'
+                ? body.error_description
+                : typeof body.error === 'string'
+                  ? body.error
+                  : response.statusText || 'Supabase password update failed';
+        throw new AuthApiError(message, response.status, code);
       }
-      const { error } = await adminClient.auth.admin.updateUserById(userId, {
-        password: newPassword,
-      });
-      if (error !== null) throw error;
     },
     async getUserById(id) {
       if (adminClient === null) {

@@ -430,8 +430,8 @@ export const ResetPasswordRouteSchema = {
     204: {
       description:
         'Password reset. No response body. The recovery session used to ' +
-        'authenticate this request remains valid; call /auth/login to ' +
-        'obtain a fresh session as needed.',
+        'authenticate this request remains valid; Supabase revokes the ' +
+        "user's other active sessions.",
     },
     400: ErrorResponseSchema('Malformed JSON body.'),
     401: ErrorResponseSchema(
@@ -445,9 +445,5 @@ export const ResetPasswordRouteSchema = {
     ),
     429: ErrorResponseSchema('Too many requests.'),
     500: ErrorResponseSchema('Unexpected failure while resetting the password.'),
-    503: ErrorResponseSchema(
-      'Password reset is unavailable (Supabase admin credentials not ' +
-        'configured).',
-    ),
   },
 };
