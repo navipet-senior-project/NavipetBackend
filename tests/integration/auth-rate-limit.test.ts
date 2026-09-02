@@ -17,7 +17,7 @@ describe('auth route rate limits', () => {
       signInWithPassword: vi.fn().mockResolvedValue(null),
     };
     app = await buildTestApp(
-      { AUTH_LOGIN_RATE_LIMIT_MAX: 1, RATE_LIMIT_MAX: 100 },
+      { AUTH_LOGIN_RATE_LIMIT_MAX: 1 },
       { supabaseResources },
     );
 
@@ -46,7 +46,7 @@ describe('auth route rate limits', () => {
       }),
     };
     app = await buildTestApp(
-      { AUTH_REGISTER_RATE_LIMIT_MAX: 1, RATE_LIMIT_MAX: 100 },
+      { AUTH_REGISTER_RATE_LIMIT_MAX: 1 },
       { supabaseResources },
     );
 
@@ -77,7 +77,7 @@ describe('auth route rate limits', () => {
       refreshSession: vi.fn().mockRejectedValue({ code: 'refresh_token_not_found' }),
     };
     app = await buildTestApp(
-      { AUTH_REFRESH_RATE_LIMIT_MAX: 1, RATE_LIMIT_MAX: 100 },
+      { AUTH_REFRESH_RATE_LIMIT_MAX: 1 },
       { supabaseResources },
     );
 
@@ -105,7 +105,7 @@ describe('auth route rate limits', () => {
       requestPasswordReset: vi.fn().mockResolvedValue(undefined),
     };
     app = await buildTestApp(
-      { AUTH_FORGOT_PASSWORD_RATE_LIMIT_MAX: 1, RATE_LIMIT_MAX: 100 },
+      { AUTH_FORGOT_PASSWORD_RATE_LIMIT_MAX: 1 },
       { supabaseResources },
     );
 
@@ -131,7 +131,7 @@ describe('auth route rate limits', () => {
       verifyOtp: vi.fn().mockResolvedValue(null),
     };
     app = await buildTestApp(
-      { AUTH_VERIFY_OTP_RATE_LIMIT_MAX: 1, RATE_LIMIT_MAX: 100 },
+      { AUTH_VERIFY_OTP_RATE_LIMIT_MAX: 1 },
       { supabaseResources },
     );
 

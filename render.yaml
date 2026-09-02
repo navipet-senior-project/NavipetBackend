@@ -28,29 +28,29 @@ services:
       - key: BODY_LIMIT_BYTES
         value: '1048576'
       - key: RATE_LIMIT_MAX
-        value: '100'
+        value: '250'
       - key: RATE_LIMIT_WINDOW
-        value: 1 minute
+        value: 1 hour
       - key: AUTH_LOGIN_RATE_LIMIT_MAX
-        value: '10'
+        value: '250'
       - key: AUTH_LOGIN_RATE_LIMIT_WINDOW
-        value: 1 minute
+        value: 1 hour
       - key: AUTH_REGISTER_RATE_LIMIT_MAX
-        value: '30'
+        value: '250'
       - key: AUTH_REGISTER_RATE_LIMIT_WINDOW
         value: 1 hour
       - key: AUTH_REFRESH_RATE_LIMIT_MAX
-        value: '30'
+        value: '250'
       - key: AUTH_REFRESH_RATE_LIMIT_WINDOW
-        value: 1 minute
+        value: 1 hour
       - key: AUTH_FORGOT_PASSWORD_RATE_LIMIT_MAX
-        value: '5'
+        value: '250'
       - key: AUTH_FORGOT_PASSWORD_RATE_LIMIT_WINDOW
         value: 1 hour
       - key: AUTH_VERIFY_OTP_RATE_LIMIT_MAX
-        value: '10'
+        value: '250'
       - key: AUTH_VERIFY_OTP_RATE_LIMIT_WINDOW
-        value: 15 minutes
+        value: 1 hour
       # Publicly exposes Swagger UI at /docs/. Set to false to keep the
       # OpenAPI document private in production.
       - key: DOCS_ENABLED

@@ -22,8 +22,8 @@ describe('parseEnv', () => {
       HOST: '0.0.0.0',
       LOG_LEVEL: 'info',
       BODY_LIMIT_BYTES: 1_048_576,
-      RATE_LIMIT_MAX: 100,
-      RATE_LIMIT_WINDOW: '1 minute',
+      RATE_LIMIT_MAX: 250,
+      RATE_LIMIT_WINDOW: '1 hour',
       DOCS_ENABLED: true,
       CORS_ORIGINS: [
         'https://app.example.com',
@@ -102,16 +102,16 @@ describe('parseEnv', () => {
   it('defaults the auth rate-limit variables when unset', () => {
     const env = parseEnv(required);
 
-    expect(env.AUTH_LOGIN_RATE_LIMIT_MAX).toBe(10);
-    expect(env.AUTH_LOGIN_RATE_LIMIT_WINDOW).toBe('1 minute');
-    expect(env.AUTH_REGISTER_RATE_LIMIT_MAX).toBe(30);
+    expect(env.AUTH_LOGIN_RATE_LIMIT_MAX).toBe(250);
+    expect(env.AUTH_LOGIN_RATE_LIMIT_WINDOW).toBe('1 hour');
+    expect(env.AUTH_REGISTER_RATE_LIMIT_MAX).toBe(250);
     expect(env.AUTH_REGISTER_RATE_LIMIT_WINDOW).toBe('1 hour');
-    expect(env.AUTH_REFRESH_RATE_LIMIT_MAX).toBe(30);
-    expect(env.AUTH_REFRESH_RATE_LIMIT_WINDOW).toBe('1 minute');
-    expect(env.AUTH_FORGOT_PASSWORD_RATE_LIMIT_MAX).toBe(5);
+    expect(env.AUTH_REFRESH_RATE_LIMIT_MAX).toBe(250);
+    expect(env.AUTH_REFRESH_RATE_LIMIT_WINDOW).toBe('1 hour');
+    expect(env.AUTH_FORGOT_PASSWORD_RATE_LIMIT_MAX).toBe(250);
     expect(env.AUTH_FORGOT_PASSWORD_RATE_LIMIT_WINDOW).toBe('1 hour');
-    expect(env.AUTH_VERIFY_OTP_RATE_LIMIT_MAX).toBe(10);
-    expect(env.AUTH_VERIFY_OTP_RATE_LIMIT_WINDOW).toBe('15 minutes');
+    expect(env.AUTH_VERIFY_OTP_RATE_LIMIT_MAX).toBe(250);
+    expect(env.AUTH_VERIFY_OTP_RATE_LIMIT_WINDOW).toBe('1 hour');
   });
 
   it('rejects an invalid auth rate-limit window', () => {
