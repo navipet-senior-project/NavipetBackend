@@ -1,4 +1,5 @@
 import type { FastifyInstance } from 'fastify';
+import { AuthApiError } from '@supabase/supabase-js';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { JwtVerifier } from '../../src/plugins/auth.js';
@@ -12,6 +13,9 @@ const anyString = expect.any(String) as unknown;
 const verifiedUser = {
   id: '11111111-1111-4111-8111-111111111111',
   email: 'student@example.com',
+  // Supabase mints an 'otp' amr method for a code-verified session; there is no
+  // distinct 'recovery' method.
+  authenticationMethods: ['otp'],
 };
 const validPayload = { newPassword: 'Password1', confirmPassword: 'Password1' };
 
@@ -51,7 +55,7 @@ describe('reset password', () => {
 
     expect(response.statusCode).toBe(204);
     expect(response.body).toBe('');
-    expect(updatePassword).toHaveBeenCalledWith(verifiedUser.id, 'Password1');
+    expect(updatePassword).toHaveBeenCalledWith('recovery-access-token', 'Password1');
   });
 
   it('returns 401 INVALID_ACCESS_TOKEN without a bearer token', async () => {
@@ -61,6 +65,39 @@ describe('reset password', () => {
     const response = await app.inject({
       method: 'POST',
       url: '/auth/reset-password',
+      payload: validPayload,
+    });
+
+    expect(response.statusCode).toBe(401);
+    expect(response.json()).toEqual({
+      error: { code: 'INVALID_ACCESS_TOKEN', message: anyString, requestId: anyString },
+    });
+    expect(updatePassword).not.toHaveBeenCalled();
+  });
+
+  it('rejects a normal login session before updating the password', async () => {
+    const updatePassword = vi.fn<PasswordUpdateGateway['updatePassword']>();
+    const supabaseResources = {
+      ...createSupabaseResources(TEST_ENV),
+      updatePassword,
+    };
+    app = await buildTestApp(
+      {},
+      {
+        supabaseResources,
+        authVerifier: {
+          verify: vi.fn().mockResolvedValue({
+            ...verifiedUser,
+            authenticationMethods: ['password'],
+          }),
+        },
+      },
+    );
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/auth/reset-password',
+      headers: { authorization: 'Bearer login-access-token' },
       payload: validPayload,
     });
 
@@ -121,11 +158,13 @@ describe('reset password', () => {
     expect(response.statusCode).toBe(422);
   });
 
-  it('returns 503 when Supabase admin credentials are not configured', async () => {
-    app = await buildTestApp(
-      {},
-      { authVerifier: verifiedVerifier() },
-    );
+  it('returns 401 when Supabase reports the recovery session was revoked', async () => {
+    const updatePassword = vi
+      .fn<PasswordUpdateGateway['updatePassword']>()
+      .mockRejectedValue(
+        new AuthApiError('Recovery session no longer exists', 403, 'session_not_found'),
+      );
+    app = await buildAppWithUpdatePassword(updatePassword);
 
     const response = await app.inject({
       method: 'POST',
@@ -134,7 +173,10 @@ describe('reset password', () => {
       payload: validPayload,
     });
 
-    expect(response.statusCode).toBe(503);
+    expect(response.statusCode).toBe(401);
+    expect(response.json()).toEqual({
+      error: { code: 'INVALID_ACCESS_TOKEN', message: anyString, requestId: anyString },
+    });
   });
 
   it('returns 500 INTERNAL_ERROR for an unexpected Supabase failure', async () => {

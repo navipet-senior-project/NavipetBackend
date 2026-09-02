@@ -417,7 +417,19 @@ const authRoutes: FastifyPluginCallbackTypebox = (fastify, _options, done) => {
     },
     reply: FastifyReply,
   ): Promise<void> => {
-    const { user } = requireAuthenticated(request);
+    const { user, accessToken } = requireAuthenticated(request);
+    // Supabase stamps amr.method 'otp' on any session minted by verifying an
+    // emailed code — recovery and signup confirmation alike; there is no
+    // distinct 'recovery' method. So this asserts "the caller proved control of
+    // the inbox in this session", which is what keeps a plain password session
+    // from changing the password without the current one.
+    if (!user.authenticationMethods?.includes('otp')) {
+      throw new AppError({
+        code: ErrorCode.INVALID_ACCESS_TOKEN,
+        statusCode: 401,
+        message: 'A recovery session is required.',
+      });
+    }
     if (request.body.newPassword !== request.body.confirmPassword) {
       throw new AppError({
         code: ErrorCode.VALIDATION_ERROR,
@@ -426,7 +438,7 @@ const authRoutes: FastifyPluginCallbackTypebox = (fastify, _options, done) => {
       });
     }
     try {
-      await fastify.supabase.updatePassword(user.id, request.body.newPassword);
+      await fastify.supabase.updatePassword(accessToken, request.body.newPassword);
     } catch (cause) {
       if (cause instanceof AppError) throw cause;
       const code = (cause as { code?: string }).code;
@@ -443,6 +455,19 @@ const authRoutes: FastifyPluginCallbackTypebox = (fastify, _options, done) => {
           code: ErrorCode.VALIDATION_ERROR,
           statusCode: 422,
           message: 'Password does not meet the requirements.',
+          cause,
+        });
+      }
+      if (
+        code === 'bad_jwt' ||
+        code === 'session_expired' ||
+        code === 'session_not_found' ||
+        code === 'user_not_found'
+      ) {
+        throw new AppError({
+          code: ErrorCode.INVALID_ACCESS_TOKEN,
+          statusCode: 401,
+          message: 'The recovery session is invalid or expired.',
           cause,
         });
       }

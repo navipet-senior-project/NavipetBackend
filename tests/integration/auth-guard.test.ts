@@ -148,6 +148,10 @@ describe('SupabaseJwtVerifier', () => {
     iss: TEST_ENV.SUPABASE_JWT_ISSUER,
     aud: TEST_ENV.SUPABASE_JWT_AUDIENCE,
     exp: 2_000_000_000,
+    amr: [
+      { method: 'recovery', timestamp: 1_900_000_000 },
+      { method: 'otp', timestamp: 1_899_999_999 },
+    ],
   };
 
   it('maps valid verified claims', async () => {
@@ -161,6 +165,7 @@ describe('SupabaseJwtVerifier', () => {
     await expect(verifier.verify('token')).resolves.toEqual({
       id: validClaims.sub,
       email: validClaims.email,
+      authenticationMethods: ['recovery', 'otp'],
     });
   });
 
