@@ -28,6 +28,7 @@ const CredentialDenialCodes = new Set<string>([
   'invalid_credentials',
   'email_not_confirmed',
 ]);
+const RecoveryIntentTtlMilliseconds = 60 * 60 * 1_000;
 
 export interface ClaimsGateway {
   getClaims(accessToken: string): Promise<unknown>;
@@ -72,12 +73,29 @@ export interface RefreshedTokens {
   userId: string;
 }
 
+function sessionPurposeFromAccessToken(accessToken: string): string | undefined {
+  const payload = accessToken.split('.')[1];
+  if (payload === undefined) return undefined;
+  try {
+    const claims = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8')) as unknown;
+    if (typeof claims !== 'object' || claims === null) return undefined;
+    const purpose = (claims as Record<string, unknown>).session_purpose;
+    return typeof purpose === 'string' ? purpose : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 export interface RefreshGateway {
   refreshSession(refreshToken: string): Promise<RefreshedTokens>;
 }
 
 export interface PasswordResetRequestGateway {
   requestPasswordReset(email: string): Promise<void>;
+}
+
+export interface RecoveryIntentGateway {
+  createRecoveryIntent(userId: string): Promise<void>;
 }
 
 export type OtpType = 'recovery' | 'register';
@@ -124,6 +142,7 @@ export interface SupabaseResources
     UserLookupGateway,
     UserEmailLookupGateway,
     PasswordResetRequestGateway,
+    RecoveryIntentGateway,
     OtpVerificationGateway,
     PasswordUpdateGateway,
     CampusPlacesGateway {
@@ -438,6 +457,11 @@ export function createSupabaseResources(config: Environment): SupabaseResources 
       if (data.session === null) {
         throw new Error('Supabase refreshSession did not return a session');
       }
+      if (sessionPurposeFromAccessToken(data.session.access_token) !== 'standard') {
+        const error = new Error('Refresh is not allowed for this session purpose');
+        Object.assign(error, { code: 'session_purpose_not_refreshable' });
+        throw error;
+      }
       return {
         accessToken: data.session.access_token,
         refreshToken: data.session.refresh_token,
@@ -482,6 +506,23 @@ export function createSupabaseResources(config: Environment): SupabaseResources 
     },
     async requestPasswordReset(email) {
       const { error } = await publicClient.auth.resetPasswordForEmail(email);
+      if (error !== null) throw error;
+    },
+    async createRecoveryIntent(userId) {
+      if (adminClient === null) {
+        throw new AppError({
+          code: ErrorCode.UPSTREAM_ERROR,
+          statusCode: 503,
+          message: 'Admin operations unavailable',
+        });
+      }
+      const { error } = await adminClient.from('auth_recovery_intents').upsert(
+        {
+          user_id: userId,
+          expires_at: new Date(Date.now() + RecoveryIntentTtlMilliseconds).toISOString(),
+        },
+        { onConflict: 'user_id' },
+      );
       if (error !== null) throw error;
     },
     async verifyOtp(email, code, type) {

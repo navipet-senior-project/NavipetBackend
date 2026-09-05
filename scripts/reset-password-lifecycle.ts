@@ -7,11 +7,9 @@
  *
  *   npx tsx scripts/reset-password-lifecycle.ts
  *
- * It proves the property the mocked integration tests cannot: after
- * /auth/reset-password returns 204, the recovery session that authorized the
- * request is still alive. The admin (service-role) implementation revoked every
- * session including that one, which surfaced in the client as
- * "Session from session_id claim in JWT does not exist" on the next call.
+ * It proves the properties mocked integration tests cannot: recovery tokens
+ * cannot use normal routes or refresh, and a successful reset revokes the
+ * recovery session that authorized it.
  */
 import { createClient } from '@supabase/supabase-js';
 import { config as loadEnvFile } from 'dotenv';
@@ -96,6 +94,28 @@ async function main(): Promise<void> {
     const tokens = verified.json<{ access_token: string; refresh_token: string }>();
     pass('verify-otp returned a recovery session');
 
+    const recoveryMe = await app.inject({
+      method: 'GET',
+      url: '/auth/me',
+      headers: { authorization: `Bearer ${tokens.access_token}` },
+    });
+    assert(
+      recoveryMe.statusCode === 401,
+      `recovery /auth/me expected 401, got ${String(recoveryMe.statusCode)}: ${recoveryMe.body}`,
+    );
+    pass('recovery access token is rejected by ordinary routes');
+
+    const recoveryRefresh = await app.inject({
+      method: 'POST',
+      url: '/auth/refresh',
+      payload: { refreshToken: tokens.refresh_token },
+    });
+    assert(
+      recoveryRefresh.statusCode === 401,
+      `recovery refresh expected 401, got ${String(recoveryRefresh.statusCode)}: ${recoveryRefresh.body}`,
+    );
+    pass('recovery refresh token is rejected');
+
     const reset = await app.inject({
       method: 'POST',
       url: '/auth/reset-password',
@@ -108,8 +128,7 @@ async function main(): Promise<void> {
     );
     pass('reset-password returned 204');
 
-    // The regression guard: GoTrue rejects a JWT whose session row is gone, so a
-    // 200 here means the recovery session survived the password change.
+    // The regression guard: GoTrue rejects a JWT whose session row is gone.
     const userResponse = await fetch(
       new URL('/auth/v1/user', env.SUPABASE_URL).toString(),
       {
@@ -120,10 +139,10 @@ async function main(): Promise<void> {
       },
     );
     assert(
-      userResponse.ok,
-      `recovery access token was revoked by the reset: ${String(userResponse.status)} ${await userResponse.text()}`,
+      !userResponse.ok,
+      `recovery access token survived the reset: ${String(userResponse.status)} ${await userResponse.text()}`,
     );
-    pass('recovery access token still resolves a live session');
+    pass('recovery access token was revoked by the reset');
 
     const sideResponse = await fetch(
       new URL('/auth/v1/user', env.SUPABASE_URL).toString(),
@@ -139,17 +158,6 @@ async function main(): Promise<void> {
       `the other session should have been revoked, got ${String(sideResponse.status)}`,
     );
     pass('the unrelated password session was revoked');
-
-    const refreshed = await app.inject({
-      method: 'POST',
-      url: '/auth/refresh',
-      payload: { refreshToken: tokens.refresh_token },
-    });
-    assert(
-      refreshed.statusCode === 200,
-      `refresh expected 200, got ${String(refreshed.statusCode)}: ${refreshed.body}`,
-    );
-    pass('recovery refresh token still rotates');
 
     const newLogin = await app.inject({
       method: 'POST',

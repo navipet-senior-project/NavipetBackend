@@ -12,6 +12,7 @@ declare module 'fastify' {
     supabase: SupabaseResources;
     externalPlaces: ExternalPlacesGateway;
     authenticate: preHandlerAsyncHookHandler;
+    authenticateRecovery: preHandlerAsyncHookHandler;
   }
 
   interface FastifyRequest {

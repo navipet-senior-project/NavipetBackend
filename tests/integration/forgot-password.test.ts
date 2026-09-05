@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   createSupabaseResources,
   type PasswordResetRequestGateway,
+  type RecoveryIntentGateway,
   type UserEmailLookupGateway,
 } from '../../src/plugins/supabase.js';
 import { buildTestApp, TEST_ENV } from '../helpers/build-test-app.js';
@@ -19,6 +20,9 @@ function buildApp(overrides: {
   requestPasswordReset?: ReturnType<
     typeof vi.fn<PasswordResetRequestGateway['requestPasswordReset']>
   >;
+  createRecoveryIntent?: ReturnType<
+    typeof vi.fn<RecoveryIntentGateway['createRecoveryIntent']>
+  >;
 }) {
   const supabaseResources = {
     ...createSupabaseResources(TEST_ENV),
@@ -28,6 +32,9 @@ function buildApp(overrides: {
     requestPasswordReset:
       overrides.requestPasswordReset ??
       vi.fn<PasswordResetRequestGateway['requestPasswordReset']>().mockResolvedValue(undefined),
+    createRecoveryIntent:
+      overrides.createRecoveryIntent ??
+      vi.fn<RecoveryIntentGateway['createRecoveryIntent']>().mockResolvedValue(undefined),
   };
   return buildTestApp({}, { supabaseResources });
 }
@@ -54,6 +61,43 @@ describe('forgot password', () => {
     expect(response.statusCode).toBe(200);
     expect(response.json()).toEqual({ message: successMessage });
     expect(requestPasswordReset).toHaveBeenCalledWith('student@example.com');
+  });
+
+  it('records the recovery intent only after Supabase accepts the reset request', async () => {
+    const requestPasswordReset = vi
+      .fn<PasswordResetRequestGateway['requestPasswordReset']>()
+      .mockResolvedValue(undefined);
+    const createRecoveryIntent = vi
+      .fn<RecoveryIntentGateway['createRecoveryIntent']>()
+      .mockResolvedValue(undefined);
+    app = await buildApp({ requestPasswordReset, createRecoveryIntent });
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/auth/forgot-password',
+      payload: { email: 'student@example.com' },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(createRecoveryIntent).toHaveBeenCalledWith(knownUserId);
+    expect(requestPasswordReset.mock.invocationCallOrder[0]).toBeLessThan(
+      createRecoveryIntent.mock.invocationCallOrder[0] ?? Infinity,
+    );
+  });
+
+  it('returns 502 when the recovery intent cannot be recorded', async () => {
+    const createRecoveryIntent = vi
+      .fn<RecoveryIntentGateway['createRecoveryIntent']>()
+      .mockRejectedValue(new Error('connection refused'));
+    app = await buildApp({ createRecoveryIntent });
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/auth/forgot-password',
+      payload: { email: 'student@example.com' },
+    });
+
+    expect(response.statusCode).toBe(502);
   });
 
   it('returns 404 USER_NOT_FOUND without sending a code when the account does not exist', async () => {

@@ -200,6 +200,7 @@ const authRoutes: FastifyPluginCallbackTypebox = (fastify, _options, done) => {
         });
       }
       if (
+        code === 'session_purpose_not_refreshable' ||
         code === 'refresh_token_not_found' ||
         code === 'session_not_found' ||
         code === 'session_expired'
@@ -331,6 +332,7 @@ const authRoutes: FastifyPluginCallbackTypebox = (fastify, _options, done) => {
     }
     try {
       await fastify.supabase.requestPasswordReset(request.body.email);
+      await fastify.supabase.createRecoveryIntent(userId);
     } catch (cause) {
       const code = (cause as { code?: string }).code;
       if (
@@ -417,19 +419,7 @@ const authRoutes: FastifyPluginCallbackTypebox = (fastify, _options, done) => {
     },
     reply: FastifyReply,
   ): Promise<void> => {
-    const { user, accessToken } = requireAuthenticated(request);
-    // Supabase stamps amr.method 'otp' on any session minted by verifying an
-    // emailed code — recovery and signup confirmation alike; there is no
-    // distinct 'recovery' method. So this asserts "the caller proved control of
-    // the inbox in this session", which is what keeps a plain password session
-    // from changing the password without the current one.
-    if (!user.authenticationMethods?.includes('otp')) {
-      throw new AppError({
-        code: ErrorCode.INVALID_ACCESS_TOKEN,
-        statusCode: 401,
-        message: 'A recovery session is required.',
-      });
-    }
+    const { accessToken } = requireAuthenticated(request);
     if (request.body.newPassword !== request.body.confirmPassword) {
       throw new AppError({
         code: ErrorCode.VALIDATION_ERROR,
@@ -478,10 +468,21 @@ const authRoutes: FastifyPluginCallbackTypebox = (fastify, _options, done) => {
         cause,
       });
     }
+    try {
+      await fastify.supabase.adminSignOut(accessToken, 'local');
+    } catch (cause) {
+      if (cause instanceof AppError) throw cause;
+      throw new AppError({
+        code: ErrorCode.UPSTREAM_ERROR,
+        statusCode: 502,
+        message: 'Password changed, but recovery-session revocation failed.',
+        cause,
+      });
+    }
     reply.code(204);
   };
   const resetPasswordOptions = {
-    preHandler: fastify.authenticate,
+    preHandler: fastify.authenticateRecovery,
     schema: ResetPasswordRouteSchema,
   };
 

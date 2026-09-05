@@ -9,6 +9,7 @@ const anyString = expect.any(String) as unknown;
 const verifiedUser = {
   id: '11111111-1111-4111-8111-111111111111',
   email: 'student@example.com',
+  sessionPurpose: 'standard' as const,
 };
 
 function verifiedVerifier(): JwtVerifier {
