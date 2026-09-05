@@ -8,6 +8,7 @@ import { TypeBoxValidatorCompiler } from '@fastify/type-provider-typebox';
 import { parseEnv, type Environment } from './config/env.js';
 import authRoutes from './modules/auth/auth.routes.js';
 import healthRoutes from './modules/health/health.routes.js';
+import campusRoutes from './modules/campus/campus.routes.js';
 import authPlugin, {
   SupabaseJwtVerifier,
   type JwtVerifier,
@@ -15,6 +16,8 @@ import authPlugin, {
 import corsPlugin from './plugins/cors.js';
 import errorHandlerPlugin from './plugins/error-handler.js';
 import rateLimitPlugin from './plugins/rate-limit.js';
+import mapboxSearchPlugin from './plugins/mapbox-search.js';
+import type { ExternalPlacesGateway } from './modules/campus/campus.types.js';
 import supabasePlugin, {
   type SupabaseResources,
 } from './plugins/supabase.js';
@@ -25,6 +28,7 @@ export interface BuildAppOptions {
   logger?: FastifyServerOptions['logger'];
   authVerifier?: JwtVerifier;
   supabaseResources?: SupabaseResources;
+  externalPlaces?: ExternalPlacesGateway;
 }
 
 export async function buildApp(
@@ -45,6 +49,7 @@ export async function buildApp(
             'SUPABASE_ANON_KEY',
             'SUPABASE_SERVICE_ROLE_KEY',
             'MULTISET_API_KEY',
+            'MAPBOX_ACCESS_TOKEN',
           ],
           censor: '[REDACTED]',
         },
@@ -64,6 +69,11 @@ export async function buildApp(
   await app.register(rateLimitPlugin);
   await app.register(swaggerPlugin);
   await app.register(supabasePlugin, supabaseOptions);
+  await app.register(mapboxSearchPlugin, {
+    ...(options.externalPlaces === undefined
+      ? {}
+      : { gateway: options.externalPlaces }),
+  });
   const authOptions = {
     verifier:
       options.authVerifier ??
@@ -75,6 +85,7 @@ export async function buildApp(
   };
   await app.register(authPlugin, authOptions);
   await app.register(authRoutes);
+  await app.register(campusRoutes);
   await app.register(healthRoutes);
 
   return app;

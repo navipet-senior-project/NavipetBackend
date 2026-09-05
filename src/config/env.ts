@@ -58,6 +58,9 @@ const EnvironmentSchema = Type.Object(
     SUPABASE_JWT_AUDIENCE: Type.String({ minLength: 1 }),
     MULTISET_API_KEY: Type.Optional(Type.String({ minLength: 1 })),
     MULTISET_API_BASE_URL: Type.Optional(HttpUrl),
+    MAPBOX_ACCESS_TOKEN: Type.Optional(Type.String({ minLength: 1 })),
+    MAPBOX_SEARCH_PROXIMITY: Type.Optional(Type.String({ minLength: 1 })),
+    MAPBOX_SEARCH_BBOX: Type.Optional(Type.String({ minLength: 1 })),
     CORS_ORIGINS: Type.Array(HttpUrl),
   },
   { additionalProperties: false },
@@ -132,11 +135,41 @@ function isValidRateLimitWindow(value: string): boolean {
   return Number.isFinite(milliseconds) && milliseconds > 0;
 }
 
+function coordinateList(value: string, count: number): number[] | null {
+  const coordinates = value.split(',').map((part) => Number(part.trim()));
+  return coordinates.length === count && coordinates.every(Number.isFinite)
+    ? coordinates
+    : null;
+}
+
+function isValidMapboxBounds(
+  proximity: string | undefined,
+  bbox: string | undefined,
+): boolean {
+  if (proximity === undefined && bbox === undefined) return true;
+  if (proximity === undefined || bbox === undefined) return false;
+  const point = coordinateList(proximity, 2);
+  const bounds = coordinateList(bbox, 4);
+  if (point === null || bounds === null) return false;
+  const [longitude, latitude] = point;
+  const [west, south, east, north] = bounds;
+  return (
+    longitude !== undefined && latitude !== undefined &&
+    west !== undefined && south !== undefined && east !== undefined && north !== undefined &&
+    longitude >= -180 && longitude <= 180 && latitude >= -90 && latitude <= 90 &&
+    west >= -180 && east <= 180 && south >= -90 && north <= 90 &&
+    west < east && south < north
+  );
+}
+
 export function parseEnv(input: RawEnvironment): Environment {
   const nodeEnv = input.NODE_ENV ?? 'development';
   const serviceRoleKey = optionalValue(input.SUPABASE_SERVICE_ROLE_KEY);
   const multisetApiKey = optionalValue(input.MULTISET_API_KEY);
   const multisetApiBaseUrl = optionalValue(input.MULTISET_API_BASE_URL);
+  const mapboxAccessToken = optionalValue(input.MAPBOX_ACCESS_TOKEN);
+  const mapboxSearchProximity = optionalValue(input.MAPBOX_SEARCH_PROXIMITY);
+  const mapboxSearchBbox = optionalValue(input.MAPBOX_SEARCH_BBOX);
 
   const candidate = {
     NODE_ENV: nodeEnv,
@@ -204,6 +237,15 @@ export function parseEnv(input: RawEnvironment): Environment {
     ...(multisetApiBaseUrl === undefined
       ? {}
       : { MULTISET_API_BASE_URL: multisetApiBaseUrl }),
+    ...(mapboxAccessToken === undefined
+      ? {}
+      : { MAPBOX_ACCESS_TOKEN: mapboxAccessToken }),
+    ...(mapboxSearchProximity === undefined
+      ? {}
+      : { MAPBOX_SEARCH_PROXIMITY: mapboxSearchProximity }),
+    ...(mapboxSearchBbox === undefined
+      ? {}
+      : { MAPBOX_SEARCH_BBOX: mapboxSearchBbox }),
   };
 
   try {
@@ -223,7 +265,21 @@ export function parseEnv(input: RawEnvironment): Environment {
       !isValidRateLimitWindow(parsed.AUTH_REGISTER_RATE_LIMIT_WINDOW) ||
       !isValidRateLimitWindow(parsed.AUTH_REFRESH_RATE_LIMIT_WINDOW) ||
       !isValidRateLimitWindow(parsed.AUTH_FORGOT_PASSWORD_RATE_LIMIT_WINDOW) ||
-      !isValidRateLimitWindow(parsed.AUTH_VERIFY_OTP_RATE_LIMIT_WINDOW)
+      !isValidRateLimitWindow(parsed.AUTH_VERIFY_OTP_RATE_LIMIT_WINDOW) ||
+      !isValidMapboxBounds(
+        parsed.MAPBOX_SEARCH_PROXIMITY,
+        parsed.MAPBOX_SEARCH_BBOX,
+      ) ||
+      ([
+        parsed.MAPBOX_ACCESS_TOKEN,
+        parsed.MAPBOX_SEARCH_PROXIMITY,
+        parsed.MAPBOX_SEARCH_BBOX,
+      ].filter((value) => value !== undefined).length !== 0 &&
+        [
+          parsed.MAPBOX_ACCESS_TOKEN,
+          parsed.MAPBOX_SEARCH_PROXIMITY,
+          parsed.MAPBOX_SEARCH_BBOX,
+        ].some((value) => value === undefined))
     ) {
       throw new Error('Environment value failed semantic validation');
     }

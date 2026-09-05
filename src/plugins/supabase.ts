@@ -9,6 +9,12 @@ import fp from 'fastify-plugin';
 import { AppError } from '../common/errors/app-error.js';
 import { ErrorCode } from '../common/errors/error-codes.js';
 import type { Environment } from '../config/env.js';
+import type {
+  CampusCategorySearch,
+  CampusDestinationRecord,
+  CampusPlacesGateway,
+} from '../modules/campus/campus.types.js';
+import { attachIndoorDestinationIds } from '../modules/campus/campus.service.js';
 
 const noSession = {
   auth: {
@@ -138,7 +144,8 @@ export interface SupabaseResources
     PasswordResetRequestGateway,
     RecoveryIntentGateway,
     OtpVerificationGateway,
-    PasswordUpdateGateway {
+    PasswordUpdateGateway,
+    CampusPlacesGateway {
   publicClient: SupabaseClient;
   adminClient: SupabaseClient | null;
   forAccessToken(accessToken: string): SupabaseClient;
@@ -159,6 +166,88 @@ export function createSupabaseResources(config: Environment): SupabaseResources 
           noSession,
         );
 
+  interface CampusDestinationRow {
+    id: string;
+    type: CampusDestinationRecord['type'];
+    name: string;
+    code: string | null;
+    aliases?: string[];
+    destination_aliases?: { alias: string }[];
+    parent_destination_id: string | null;
+    building_code: string | null;
+    room_number: string | null;
+    floor_number: string | null;
+    latitude: number | null;
+    longitude: number | null;
+    outdoor_destination_latitude: number | null;
+    outdoor_destination_longitude: number | null;
+    source: string;
+    metadata: Record<string, unknown>;
+    active?: boolean;
+    searchable?: boolean;
+    rank?: number;
+  }
+
+  const campusColumns =
+    'id,type,name,code,parent_destination_id,building_code,room_number,' +
+    'floor_number,latitude,longitude,outdoor_destination_latitude,' +
+    'outdoor_destination_longitude,source,metadata,active,searchable,' +
+    'destination_aliases(alias)';
+
+  function mapCampusDestination(
+    row: CampusDestinationRow,
+    parentName?: string,
+  ): CampusDestinationRecord {
+    return {
+      id: row.id,
+      type: row.type,
+      name: row.name,
+      code: row.code,
+      aliases:
+        row.aliases ?? row.destination_aliases?.map(({ alias }) => alias) ?? [],
+      parentDestinationId: row.parent_destination_id,
+      ...(parentName === undefined ? {} : { parentName }),
+      buildingCode: row.building_code,
+      roomNumber: row.room_number,
+      floorNumber: row.floor_number,
+      latitude: row.latitude,
+      longitude: row.longitude,
+      outdoorDestinationLatitude: row.outdoor_destination_latitude,
+      outdoorDestinationLongitude: row.outdoor_destination_longitude,
+      source: row.source,
+      active: row.active ?? true,
+      searchable: row.searchable ?? true,
+      metadata: row.metadata,
+      rank: row.rank ?? 0,
+      indoorDestinationId: null,
+    };
+  }
+
+  async function attachIndoorReferences(
+    destinations: CampusDestinationRecord[],
+  ): Promise<CampusDestinationRecord[]> {
+    if (adminClient === null || destinations.length === 0) return destinations;
+    const response = (await adminClient
+      .from('destination_provider_refs')
+      .select('destination_id,external_id')
+      .eq('provider', 'multiset')
+      .in(
+        'destination_id',
+        destinations.map((destination) => destination.id),
+      )) as unknown as {
+      data: Array<{ destination_id: string; external_id: string }> | null;
+      error: Error | null;
+    };
+    if (response.error !== null) throw response.error;
+    return attachIndoorDestinationIds(
+      destinations,
+      (response.data ?? []).map((reference) => ({
+        destinationId: reference.destination_id,
+        externalId: reference.external_id,
+      })),
+    );
+  }
+
   return {
     publicClient,
     adminClient,
@@ -167,6 +256,138 @@ export function createSupabaseResources(config: Environment): SupabaseResources 
         ...noSession,
         global: { headers: { Authorization: `Bearer ${accessToken}` } },
       });
+    },
+    async searchDestinations(query, limit) {
+      const response = (await publicClient.rpc(
+        'search_campus_destinations',
+        { search_query: query, result_limit: Math.min(limit, 50) },
+      )) as unknown as {
+        data: CampusDestinationRow[] | null;
+        error: Error | null;
+      };
+      if (response.error !== null) throw response.error;
+      return attachIndoorReferences(
+        (response.data ?? []).map((row) => mapCampusDestination(row)),
+      );
+    },
+    async searchCategoryDestinations(category, limit) {
+      let request = publicClient
+        .from('campus_destinations')
+        .select(campusColumns)
+        .eq('active', true)
+        .eq('searchable', true);
+      const metadataCategory: Partial<Record<CampusCategorySearch, string>> = {
+        gender_neutral_restroom: 'gender_neutral_restroom',
+        coffee: 'coffee',
+        shuttle_stop: 'shuttle_stop',
+        bus_stop: 'bus_stop',
+        bike_rack: 'bike_rack',
+        ev_charging: 'ev_charging',
+      };
+      if (
+        category === 'visitor_parking' ||
+        category === 'accessible_parking'
+      ) {
+        request = request.eq('type', 'parking');
+      } else {
+        request = request.contains('metadata', {
+          categories: [metadataCategory[category]],
+        });
+      }
+      const fetchLimit =
+        category === 'visitor_parking' || category === 'accessible_parking'
+          ? 50
+          : Math.min(limit, 50);
+      const { data, error } = await request.limit(fetchLimit);
+      if (error !== null) throw error;
+      return attachIndoorReferences(
+        (data as unknown as CampusDestinationRow[]).map((row) =>
+          mapCampusDestination(row),
+        ),
+      );
+    },
+    async findPlaceById(id) {
+      const { data, error } = await publicClient
+        .from('campus_destinations')
+        .select(campusColumns)
+        .eq('id', id)
+        .eq('active', true)
+        .eq('searchable', true)
+        .maybeSingle();
+      if (error !== null) throw error;
+      if (data === null) return null;
+      const [place] = await attachIndoorReferences([
+        mapCampusDestination(data as unknown as CampusDestinationRow),
+      ]);
+      return place ?? null;
+    },
+    async findBuildingByCode(code) {
+      const { data, error } = await publicClient
+        .from('campus_destinations')
+        .select(campusColumns)
+        .eq('type', 'building')
+        .ilike('code', code)
+        .eq('active', true)
+        .eq('searchable', true)
+        .maybeSingle();
+      if (error !== null) throw error;
+      if (data === null) return null;
+      const [building] = await attachIndoorReferences([
+        mapCampusDestination(data as unknown as CampusDestinationRow),
+      ]);
+      return building ?? null;
+    },
+    async searchBuildingRooms(buildingId, query, limit) {
+      const buildingResponse = (await publicClient
+        .from('campus_destinations')
+        .select('name')
+        .eq('id', buildingId)
+        .eq('type', 'building')
+        .eq('active', true)
+        .eq('searchable', true)
+        .maybeSingle()) as unknown as {
+        data: { name: string } | null;
+        error: Error | null;
+      };
+      if (buildingResponse.error !== null) throw buildingResponse.error;
+      if (buildingResponse.data === null) return [];
+      const { data, error } = await publicClient
+        .from('campus_destinations')
+        .select(campusColumns)
+        .eq('type', 'room')
+        .eq('parent_destination_id', buildingId)
+        .eq('active', true)
+        .eq('searchable', true)
+        .ilike('room_number', `${query}%`)
+        .order('room_number')
+        .limit(Math.min(limit, 50));
+      if (error !== null) throw error;
+      const parentName = buildingResponse.data.name;
+      return attachIndoorReferences(
+        (data as unknown as CampusDestinationRow[]).map((row) =>
+          mapCampusDestination(row, parentName),
+        ),
+      );
+    },
+    async searchBuildingChildren(buildingId, category, limit) {
+      let request = publicClient
+        .from('campus_destinations')
+        .select(campusColumns)
+        .eq('parent_destination_id', buildingId)
+        .eq('active', true)
+        .eq('searchable', true);
+      if (category === 'accessible_entrance') {
+        request = request.eq('type', 'entrance');
+      } else {
+        request = request.contains('metadata', { categories: [category] });
+      }
+      const { data, error } = await request.limit(Math.min(limit, 50));
+      if (error !== null) throw error;
+      return attachIndoorReferences(
+        (data as unknown as CampusDestinationRow[]).map((row) =>
+          mapCampusDestination(row),
+        ),
+      );
     },
     async getClaims(accessToken) {
       const { data, error } = await publicClient.auth.getClaims(accessToken);
