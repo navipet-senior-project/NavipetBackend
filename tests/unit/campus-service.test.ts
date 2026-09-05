@@ -46,6 +46,7 @@ function gateways(records: CampusDestinationRecord[]): {
     campusPlaces: {
       searchDestinations: vi.fn().mockResolvedValue(records),
       searchCategoryDestinations: vi.fn().mockResolvedValue(records),
+      listProximityDestinations: vi.fn().mockResolvedValue(records),
       findPlaceById: vi.fn().mockResolvedValue(null),
       findBuildingByCode: vi.fn().mockResolvedValue(null),
       searchBuildingRooms: vi.fn().mockResolvedValue([]),
@@ -333,5 +334,186 @@ describe('campus autocomplete service', () => {
         },
       },
     ]);
+  });
+
+  it('filters proximity candidates by verified category before ordering by distance', async () => {
+    const fartherRestroom = destination({
+      id: '00000000-0000-4000-8000-000000000021',
+      type: 'amenity',
+      name: 'Library Restroom',
+      code: null,
+      buildingCode: 'LIB',
+      latitude: 33.7847,
+      longitude: -118.1141,
+      metadata: { categories: ['restroom'] },
+    });
+    const nearerRestroom = destination({
+      id: '00000000-0000-4000-8000-000000000022',
+      type: 'amenity',
+      name: 'Brotman Hall Restroom',
+      code: null,
+      buildingCode: 'BH',
+      latitude: 33.78425,
+      longitude: -118.1141,
+      metadata: { categories: ['restroom'] },
+    });
+    const closerParking = destination({
+      id: '00000000-0000-4000-8000-000000000023',
+      type: 'parking',
+      name: 'Nearby Parking',
+      code: 'P1',
+      latitude: 33.7839,
+      longitude: -118.1141,
+      metadata: { categories: ['parking_lot'] },
+    });
+    const deps = gateways([fartherRestroom, closerParking, nearerRestroom]);
+
+    const result = await createCampusService(deps).autocomplete(
+      'nearest restroom',
+      10,
+      { latitude: 33.7838, longitude: -118.1141 },
+    );
+
+    expect(result).toMatchObject({
+      query: 'nearest restroom',
+      proximity: { intent: 'restroom', status: 'ok', radiusMeters: 2000 },
+    });
+    expect(result.results.map(({ id }) => id)).toEqual([
+      nearerRestroom.id,
+      fartherRestroom.id,
+    ]);
+    expect(result.results[0]).toMatchObject({
+      distanceMeters: 50,
+      navigation: {
+        outdoorDestination: { latitude: 33.78425, longitude: -118.1141 },
+      },
+    });
+  });
+
+  it('enforces the campus search radius and does not use external fallback', async () => {
+    const outsideCampus = destination({
+      type: 'parking',
+      name: 'Distant Parking',
+      latitude: 33.81,
+      longitude: -118.1141,
+      metadata: { categories: ['parking_lot'] },
+    });
+    const deps = gateways([outsideCampus]);
+    const externalSearch = vi.fn().mockResolvedValue([]);
+    deps.externalPlaces.searchExternalPlaces = externalSearch;
+
+    const result = await createCampusService(deps).autocomplete(
+      'nearest parking',
+      10,
+      { latitude: 33.7838, longitude: -118.1141 },
+    );
+
+    expect(result.results).toEqual([]);
+    expect(externalSearch).not.toHaveBeenCalled();
+  });
+
+  it('ranks an exact verified food category before a nearer broad dining match', async () => {
+    const exactFood = destination({
+      id: '00000000-0000-4000-8000-000000000024',
+      type: 'dining',
+      name: 'Verified Food Counter',
+      code: null,
+      buildingCode: null,
+      latitude: 33.7847,
+      longitude: -118.1141,
+      metadata: { categories: ['food'] },
+    });
+    const broadDining = destination({
+      id: '00000000-0000-4000-8000-000000000025',
+      type: 'dining',
+      name: 'Dining Hall',
+      code: null,
+      buildingCode: null,
+      latitude: 33.78425,
+      longitude: -118.1141,
+      metadata: { categories: ['dining'] },
+    });
+    const deps = gateways([broadDining, exactFood]);
+
+    const result = await createCampusService(deps).autocomplete('food near me', 10, {
+      latitude: 33.7838,
+      longitude: -118.1141,
+    });
+
+    expect(result.results.map(({ id }) => id)).toEqual([
+      exactFood.id,
+      broadDining.id,
+    ]);
+  });
+
+  it('does not lose a nearby result behind an arbitrary candidate cap', async () => {
+    const coordinateLess = Array.from({ length: 100 }, (_, index) =>
+      destination({
+        id: `00000000-0000-4000-8000-${String(index).padStart(12, '0')}`,
+        type: 'amenity',
+        name: `Restroom without coordinates ${String(index)}`,
+        code: null,
+        metadata: { categories: ['restroom'] },
+      }),
+    );
+    const nearby = destination({
+      id: '00000000-0000-4000-8000-000000000199',
+      type: 'amenity',
+      name: 'Nearby Verified Restroom',
+      code: null,
+      latitude: 33.78425,
+      longitude: -118.1141,
+      metadata: { categories: ['restroom'] },
+    });
+    const deps = gateways([]);
+    deps.campusPlaces.listProximityDestinations = vi
+      .fn()
+      .mockResolvedValue([...coordinateLess, nearby]);
+
+    const result = await createCampusService(deps).autocomplete(
+      'nearest restroom',
+      10,
+      { latitude: 33.7838, longitude: -118.1141 },
+    );
+
+    expect(result.results.map(({ id }) => id)).toEqual([nearby.id]);
+  });
+
+  it('recognizes verified dining records with coffee in the canonical name', async () => {
+    const coastalCoffee = destination({
+      id: '00000000-0000-4000-8000-000000000200',
+      type: 'amenity',
+      name: 'Coastal Coffee',
+      code: null,
+      aliases: [],
+      latitude: 33.78425,
+      longitude: -118.1141,
+      metadata: { categories: ['dining'] },
+    });
+    const deps = gateways([coastalCoffee]);
+
+    const result = await createCampusService(deps).autocomplete('coffee near me', 10, {
+      latitude: 33.7838,
+      longitude: -118.1141,
+    });
+
+    expect(result.results).toMatchObject([
+      { id: coastalCoffee.id, title: 'Coastal Coffee', distanceMeters: 50 },
+    ]);
+  });
+
+  it.each([
+    ['food near me', 'food'],
+    ['coffee near me', 'coffee'],
+    ['closest bus stop', 'bus_stop'],
+  ] as const)('supports proximity intent %s', async (input, intent) => {
+    const deps = gateways([]);
+
+    const result = await createCampusService(deps).autocomplete(input, 10, {
+      latitude: 33.7838,
+      longitude: -118.1141,
+    });
+
+    expect(result).toMatchObject({ proximity: { intent, status: 'ok' }, results: [] });
   });
 });

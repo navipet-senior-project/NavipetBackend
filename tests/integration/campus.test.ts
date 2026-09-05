@@ -1,6 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { FastifyInstance } from 'fastify';
+import { Writable } from 'node:stream';
 
+import { buildApp } from '../../src/app.js';
 import type {
   CampusDestinationRecord,
   ExternalPlacesGateway,
@@ -79,6 +81,7 @@ function resources(
       );
     }),
     searchCategoryDestinations: vi.fn().mockResolvedValue([]),
+    listProximityDestinations: vi.fn().mockResolvedValue([]),
     findPlaceById: vi.fn((id: string) =>
       Promise.resolve(searchable.find((record) => record.id === id) ?? null),
     ),
@@ -316,5 +319,137 @@ describe('campus routes', () => {
 
     expect(response.statusCode).toBe(200);
     expect(response.json()).toMatchObject({ results: [{ id: elevator.id, title: 'COB Elevator' }] });
+  });
+
+  it('returns a structured error when proximity intent lacks user location', async () => {
+    app = await buildTestApp({}, {
+      supabaseResources: resources(),
+      externalPlaces: noExternal(),
+    });
+
+    const response = await app.inject({
+      method: 'GET',
+      url: '/autocomplete?q=nearest%20restroom',
+    });
+
+    expect(response.statusCode).toBe(422);
+    expect(response.json()).toMatchObject({
+      error: {
+        code: 'LOCATION_REQUIRED',
+        message: 'Latitude and longitude are required for proximity search.',
+        requestId: expect.any(String) as unknown,
+      },
+    });
+  });
+
+  it.each([
+    '/autocomplete?q=nearest%20parking&latitude=91&longitude=-118.1141',
+    '/autocomplete?q=nearest%20parking&latitude=33.7838&longitude=-181',
+    '/autocomplete?q=nearest%20parking&latitude=33.7838',
+  ])('rejects invalid or incomplete coordinates: %s', async (url) => {
+    app = await buildTestApp({}, {
+      supabaseResources: resources(),
+      externalPlaces: noExternal(),
+    });
+
+    const response = await app.inject({ method: 'GET', url });
+
+    expect(response.statusCode).toBe(422);
+    expect(response.json()).toMatchObject({ error: { code: 'VALIDATION_ERROR' } });
+  });
+
+  it('returns verified nearby results in distance order with proximity metadata', async () => {
+    const far = destination({
+      id: '00000000-0000-4000-8000-000000000031',
+      type: 'parking',
+      name: 'Parking Structure 2',
+      code: 'PS2',
+      buildingCode: null,
+      latitude: 33.7856,
+      longitude: -118.1141,
+      metadata: { categories: ['parking_structure'] },
+    });
+    const near = destination({
+      id: '00000000-0000-4000-8000-000000000032',
+      type: 'parking',
+      name: 'Parking Lot G1',
+      code: 'G1',
+      buildingCode: null,
+      latitude: 33.78425,
+      longitude: -118.1141,
+      metadata: { categories: ['parking_lot'] },
+    });
+    app = await buildTestApp({}, {
+      supabaseResources: resources({
+        listProximityDestinations: vi.fn().mockResolvedValue([far, near]),
+      }),
+      externalPlaces: noExternal(),
+    });
+
+    const response = await app.inject({
+      method: 'GET',
+      url: '/autocomplete?q=nearest%20parking&latitude=33.7838&longitude=-118.1141&limit=10',
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      query: 'nearest parking',
+      proximity: { intent: 'parking', status: 'ok', radiusMeters: 2000 },
+      results: [
+        { id: near.id, distanceMeters: 50 },
+        { id: far.id, distanceMeters: 200 },
+      ],
+    });
+  });
+
+  it('returns no nearby results without calling Mapbox', async () => {
+    const external = { searchExternalPlaces: vi.fn().mockResolvedValue([]) };
+    app = await buildTestApp({}, {
+      supabaseResources: resources({
+        listProximityDestinations: vi.fn().mockResolvedValue([]),
+      }),
+      externalPlaces: external,
+    });
+
+    const response = await app.inject({
+      method: 'GET',
+      url: '/autocomplete?q=coffee%20near%20me&latitude=33.7838&longitude=-118.1141',
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      proximity: { intent: 'coffee', status: 'ok' },
+      results: [],
+    });
+    expect(external.searchExternalPlaces).not.toHaveBeenCalled();
+  });
+
+  it('redacts precise coordinates from autocomplete request logs', async () => {
+    let output = '';
+    const stream = new Writable({
+      write(chunk: Buffer, _encoding, callback) {
+        output += chunk.toString();
+        callback();
+      },
+    });
+    app = await buildApp({
+      env: TEST_ENV,
+      logger: { level: 'info', stream },
+      supabaseResources: resources(),
+      externalPlaces: noExternal(),
+    });
+
+    await app.inject({
+      method: 'GET',
+      url: '/autocomplete?q=nearest%20parking&latitude=33.7838&longitude=-118.1141',
+    });
+    await app.inject({
+      method: 'GET',
+      url: '/autocomplete?q=nearest%20parking&lat%69tude=33.7838&long%69tude=-118.1141',
+    });
+
+    expect(output).not.toContain('33.7838');
+    expect(output).not.toContain('-118.1141');
+    expect(output).toContain('[REDACTED]');
   });
 });

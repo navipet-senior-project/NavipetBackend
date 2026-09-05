@@ -6,7 +6,11 @@ import type {
   ContainedDestinationCategory,
   ExternalPlacesGateway,
   PublicCampusResult,
+  ProximityIntent,
+  UserLocation,
 } from './campus.types.js';
+import { AppError } from '../../common/errors/app-error.js';
+import { ErrorCode } from '../../common/errors/error-codes.js';
 
 interface RoomIntent {
   buildingQuery: string;
@@ -54,6 +58,16 @@ const CategoryQueries: Readonly<Record<string, CampusCategorySearch>> = {
   'bike rack': 'bike_rack',
   'ev charging': 'ev_charging',
 };
+
+const ProximityQueries: Readonly<Record<string, ProximityIntent>> = {
+  'nearest restroom': 'restroom',
+  'food near me': 'food',
+  'nearest parking': 'parking',
+  'closest bus stop': 'bus_stop',
+  'coffee near me': 'coffee',
+};
+
+const CampusSearchRadiusMeters = 2000;
 
 // Verified CSULB intent names whose canonical destination uses a different
 // current display name. Keep destination ownership in the database by
@@ -260,6 +274,7 @@ function validCoordinatePair(
 export function toPublicCampusResult(
   destination: CampusDestinationRecord,
   subtitleOverride?: string,
+  distanceMeters?: number,
 ): PublicCampusResult {
   const outdoorLatitude =
     destination.outdoorDestinationLatitude ?? destination.latitude;
@@ -295,6 +310,7 @@ export function toPublicCampusResult(
       : { buildingCode: destination.buildingCode }),
     ...(destination.roomNumber === null ? {} : { roomNumber: destination.roomNumber }),
     ...(destination.floorNumber === null ? {} : { floorNumber: destination.floorNumber }),
+    ...(distanceMeters === undefined ? {} : { distanceMeters }),
     ...(hasNavigation
       ? {
           navigation: {
@@ -313,6 +329,64 @@ export function toPublicCampusResult(
         }
       : {}),
   };
+}
+
+function coordinatesFor(
+  destination: CampusDestinationRecord,
+): UserLocation | null {
+  const latitude =
+    destination.outdoorDestinationLatitude ?? destination.latitude;
+  const longitude =
+    destination.outdoorDestinationLongitude ?? destination.longitude;
+  return validCoordinatePair(latitude, longitude)
+    ? { latitude, longitude: longitude as number }
+    : null;
+}
+
+function proximityRelevance(
+  destination: CampusDestinationRecord,
+  intent: ProximityIntent,
+): number {
+  const categories = stringArray(destination.metadata.categories);
+  switch (intent) {
+    case 'restroom':
+      return categories.includes('restroom') ? 2 : 0;
+    case 'food':
+      if (categories.includes('food')) return 2;
+      return categories.includes('dining') || destination.type === 'dining' ? 1 : 0;
+    case 'parking':
+      if (categories.some((category) => category.startsWith('parking_'))) return 2;
+      return destination.type === 'parking' ? 1 : 0;
+    case 'bus_stop':
+      return categories.includes('bus_stop') ? 2 : 0;
+    case 'coffee': {
+      if (categories.includes('coffee')) return 2;
+      const verifiedNames = [destination.name, ...destination.aliases].map(normalized);
+      return categories.includes('dining') &&
+        verifiedNames.some((name) => name.split(' ').includes('coffee'))
+        ? 1
+        : 0;
+    }
+  }
+}
+
+function distanceMeters(origin: UserLocation, destination: UserLocation): number {
+  const earthRadiusMeters = 6_371_000;
+  const degreesToRadians = Math.PI / 180;
+  const latitudeDelta =
+    (destination.latitude - origin.latitude) * degreesToRadians;
+  const longitudeDelta =
+    (destination.longitude - origin.longitude) * degreesToRadians;
+  const originLatitude = origin.latitude * degreesToRadians;
+  const destinationLatitude = destination.latitude * degreesToRadians;
+  const haversine =
+    Math.sin(latitudeDelta / 2) ** 2 +
+    Math.cos(originLatitude) *
+      Math.cos(destinationLatitude) *
+      Math.sin(longitudeDelta / 2) ** 2;
+  return Math.round(
+    earthRadiusMeters * 2 * Math.atan2(Math.sqrt(haversine), Math.sqrt(1 - haversine)),
+  );
 }
 
 function buildingAlternative(building: CampusDestinationRecord): PublicCampusResult {
@@ -335,8 +409,63 @@ function rankRooms(
 
 export function createCampusService(dependencies: CampusServiceDependencies) {
   return {
-    async autocomplete(input: string, limit: number): Promise<CampusSearchResponse> {
+    async autocomplete(
+      input: string,
+      limit: number,
+      location?: UserLocation,
+    ): Promise<CampusSearchResponse> {
       const query = normalizeCampusQuery(input);
+      const proximityIntent = ProximityQueries[query.normalized];
+      if (proximityIntent !== undefined) {
+        if (location === undefined) {
+          throw new AppError({
+            code: ErrorCode.LOCATION_REQUIRED,
+            statusCode: 422,
+            message: 'Latitude and longitude are required for proximity search.',
+          });
+        }
+        const candidates = await dependencies.campusPlaces.listProximityDestinations();
+        const ranked = candidates
+          .filter((destination) => destination.active && destination.searchable)
+          .map((destination) => ({
+            destination,
+            relevance: proximityRelevance(destination, proximityIntent),
+          }))
+          .filter(({ relevance }) => relevance > 0)
+          .map(({ destination, relevance }) => {
+            const coordinates = coordinatesFor(destination);
+            return coordinates === null
+              ? null
+              : {
+                  destination,
+                  relevance,
+                  distance: distanceMeters(location, coordinates),
+                };
+          })
+          .filter(
+            (candidate): candidate is NonNullable<typeof candidate> =>
+              candidate !== null && candidate.distance <= CampusSearchRadiusMeters,
+          )
+          .sort(
+            (left, right) =>
+              right.relevance - left.relevance ||
+              left.distance - right.distance ||
+              left.destination.name.localeCompare(right.destination.name),
+          )
+          .slice(0, limit)
+          .map(({ destination, distance }) =>
+            toPublicCampusResult(destination, undefined, distance),
+          );
+        return {
+          query: query.display,
+          results: ranked,
+          proximity: {
+            intent: proximityIntent,
+            status: 'ok',
+            radiusMeters: CampusSearchRadiusMeters,
+          },
+        };
+      }
       const directBuildingCode = DirectBuildingIntents[query.normalized];
       if (directBuildingCode !== undefined) {
         const building = await dependencies.campusPlaces.findBuildingByCode(

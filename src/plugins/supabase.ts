@@ -306,6 +306,26 @@ export function createSupabaseResources(config: Environment): SupabaseResources 
         ),
       );
     },
+    async listProximityDestinations() {
+      const rows: CampusDestinationRow[] = [];
+      const pageSize = 200;
+      for (let from = 0; ; from += pageSize) {
+        const { data, error } = await publicClient
+          .from('campus_destinations')
+          .select(campusColumns)
+          .eq('active', true)
+          .eq('searchable', true)
+          .order('id')
+          .range(from, from + pageSize - 1);
+        if (error !== null) throw error;
+        const page = data as unknown as CampusDestinationRow[];
+        rows.push(...page);
+        if (page.length < pageSize) break;
+      }
+      return attachIndoorReferences(
+        rows.map((row) => mapCampusDestination(row)),
+      );
+    },
     async findPlaceById(id) {
       const { data, error } = await publicClient
         .from('campus_destinations')
