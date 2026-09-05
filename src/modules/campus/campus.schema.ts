@@ -11,6 +11,7 @@ const DestinationTypeSchema = Type.Union([
   Type.Literal('service'),
   Type.Literal('amenity'),
   Type.Literal('transit'),
+  Type.Literal('housing'),
   Type.Literal('landmark'),
   Type.Literal('external'),
 ]);

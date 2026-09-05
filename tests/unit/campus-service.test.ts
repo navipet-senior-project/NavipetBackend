@@ -85,6 +85,26 @@ describe('normalizeCampusQuery', () => {
 });
 
 describe('campus autocomplete service', () => {
+  it('exposes verified residence buildings as housing', async () => {
+    const housing = destination({
+      id: '00000000-0000-4000-8000-000000000020',
+      name: 'Parkside North',
+      code: 'PN',
+      buildingCode: 'PN',
+      metadata: { categories: ['housing'] },
+    });
+
+    const result = await createCampusService(gateways([housing])).autocomplete(
+      'Parkside North',
+      10,
+    );
+
+    expect(result.results[0]).toMatchObject({
+      id: housing.id,
+      type: 'housing',
+    });
+  });
+
   it('attaches only verified Multiset destination references', () => {
     const cob = destination();
     const hsci = destination({ id: '00000000-0000-4000-8000-000000000002' });

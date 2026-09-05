@@ -95,7 +95,7 @@ export interface UserLocation {
 
 export interface PublicCampusResult {
   id: string;
-  type: CampusDestinationType | 'external';
+  type: CampusDestinationType | 'housing' | 'external';
   title: string;
   subtitle: string;
   source: string;

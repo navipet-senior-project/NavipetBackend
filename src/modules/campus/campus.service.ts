@@ -285,6 +285,10 @@ export function toPublicCampusResult(
     destination.indoorDestinationId !== null &&
     destination.indoorDestinationId.trim().length > 0;
   const hasNavigation = hasOutdoor || hasIndoor;
+  const categories = stringArray(destination.metadata.categories);
+  const publicType = categories.includes('housing')
+    ? 'housing'
+    : destination.type;
   const title =
     destination.type === 'room' &&
     destination.buildingCode !== null &&
@@ -301,7 +305,7 @@ export function toPublicCampusResult(
 
   return {
     id: destination.id,
-    type: destination.type,
+    type: publicType,
     title,
     subtitle: subtitleOverride ?? defaultSubtitle,
     source: destination.source,

@@ -17,6 +17,7 @@ const ids = {
   cob: '00000000-0000-4000-8000-000000000001',
   hsci: '00000000-0000-4000-8000-000000000002',
   room: '00000000-0000-4000-8000-000000000003',
+  housing: '00000000-0000-4000-8000-000000000004',
 };
 
 function destination(
@@ -57,7 +58,7 @@ const searchable = [
   destination({ type: 'landmark', name: 'Earl Burns Miller Japanese Garden', code: 'JG', buildingCode: 'JG', aliases: ['Japanese Garden'], metadata: { categories: ['campus_landmark'] } }),
   destination({ name: 'LBS Financial Credit Union Pyramid', code: 'PYR', buildingCode: 'PYR', aliases: [], metadata: { categories: ['athletic_facility', 'campus_landmark'] } }),
   destination({ name: 'E. James Brotman Hall', code: 'BH', buildingCode: 'BH', aliases: ['Brotman Hall'], metadata: { categories: ['building'] } }),
-  destination({ name: 'Parkside North', code: 'PSN', buildingCode: 'PSN', aliases: [], metadata: { categories: ['housing'] } }),
+  destination({ id: ids.housing, name: 'Parkside North', code: 'PN', buildingCode: 'PN', aliases: [], metadata: { categories: ['housing'] } }),
   destination({ type: 'landmark', name: 'Softball Field', code: null, buildingCode: null, aliases: [], metadata: { categories: ['athletic_facility'] } }),
 ];
 
@@ -145,6 +146,29 @@ describe('campus routes', () => {
     expect(response.json()).toMatchObject({
       query,
       results: [{ title, source: expect.any(String) as unknown }],
+    });
+  });
+
+  it('serializes a verified residence as housing', async () => {
+    const housing = searchable.find((record) => record.id === ids.housing);
+    app = await buildTestApp(
+      {},
+      {
+        supabaseResources: resources({
+          searchDestinations: vi.fn().mockResolvedValue([housing]),
+        }),
+        externalPlaces: noExternal(),
+      },
+    );
+
+    const response = await app.inject({
+      method: 'GET',
+      url: '/autocomplete?q=Parkside%20North',
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      results: [{ id: ids.housing, type: 'housing' }],
     });
   });
 
