@@ -32,6 +32,12 @@ function requireCoordinatePair(
   }
 }
 
+function redactLocationFromUrl(url: string | undefined): string | undefined {
+  if (url === undefined) return undefined;
+  const queryStart = url.indexOf('?');
+  return queryStart < 0 ? url : `${url.slice(0, queryStart)}?[REDACTED]`;
+}
+
 const campusRoutes: FastifyPluginCallbackTypebox = (fastify, _options, done) => {
   const service = createCampusService({
     campusPlaces: fastify.supabase,
@@ -40,7 +46,26 @@ const campusRoutes: FastifyPluginCallbackTypebox = (fastify, _options, done) => 
 
   fastify.get(
     '/autocomplete',
-    { schema: AutocompleteRouteSchema },
+    {
+      schema: AutocompleteRouteSchema,
+      childLoggerFactory(logger, bindings, options, request) {
+        return logger.child(bindings, {
+          ...options,
+          serializers: {
+            ...options.serializers,
+            req() {
+              return {
+                method: request.method,
+                url: redactLocationFromUrl(request.url),
+                host: request.headers.host,
+                remoteAddress: request.socket.remoteAddress,
+                remotePort: request.socket.remotePort,
+              };
+            },
+          },
+        });
+      },
+    },
     async (request) => {
       requireMeaningfulQuery(request.query.q);
       requireCoordinatePair(request.query.latitude, request.query.longitude);

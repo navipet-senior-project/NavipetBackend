@@ -46,7 +46,7 @@ function gateways(records: CampusDestinationRecord[]): {
     campusPlaces: {
       searchDestinations: vi.fn().mockResolvedValue(records),
       searchCategoryDestinations: vi.fn().mockResolvedValue(records),
-      searchProximityDestinations: vi.fn().mockResolvedValue(records),
+      listProximityDestinations: vi.fn().mockResolvedValue(records),
       findPlaceById: vi.fn().mockResolvedValue(null),
       findBuildingByCode: vi.fn().mockResolvedValue(null),
       searchBuildingRooms: vi.fn().mockResolvedValue([]),
@@ -443,6 +443,62 @@ describe('campus autocomplete service', () => {
     expect(result.results.map(({ id }) => id)).toEqual([
       exactFood.id,
       broadDining.id,
+    ]);
+  });
+
+  it('does not lose a nearby result behind an arbitrary candidate cap', async () => {
+    const coordinateLess = Array.from({ length: 100 }, (_, index) =>
+      destination({
+        id: `00000000-0000-4000-8000-${String(index).padStart(12, '0')}`,
+        type: 'amenity',
+        name: `Restroom without coordinates ${String(index)}`,
+        code: null,
+        metadata: { categories: ['restroom'] },
+      }),
+    );
+    const nearby = destination({
+      id: '00000000-0000-4000-8000-000000000199',
+      type: 'amenity',
+      name: 'Nearby Verified Restroom',
+      code: null,
+      latitude: 33.78425,
+      longitude: -118.1141,
+      metadata: { categories: ['restroom'] },
+    });
+    const deps = gateways([]);
+    deps.campusPlaces.listProximityDestinations = vi
+      .fn()
+      .mockResolvedValue([...coordinateLess, nearby]);
+
+    const result = await createCampusService(deps).autocomplete(
+      'nearest restroom',
+      10,
+      { latitude: 33.7838, longitude: -118.1141 },
+    );
+
+    expect(result.results.map(({ id }) => id)).toEqual([nearby.id]);
+  });
+
+  it('recognizes verified dining records with coffee in the canonical name', async () => {
+    const coastalCoffee = destination({
+      id: '00000000-0000-4000-8000-000000000200',
+      type: 'amenity',
+      name: 'Coastal Coffee',
+      code: null,
+      aliases: [],
+      latitude: 33.78425,
+      longitude: -118.1141,
+      metadata: { categories: ['dining'] },
+    });
+    const deps = gateways([coastalCoffee]);
+
+    const result = await createCampusService(deps).autocomplete('coffee near me', 10, {
+      latitude: 33.7838,
+      longitude: -118.1141,
+    });
+
+    expect(result.results).toMatchObject([
+      { id: coastalCoffee.id, title: 'Coastal Coffee', distanceMeters: 50 },
     ]);
   });
 

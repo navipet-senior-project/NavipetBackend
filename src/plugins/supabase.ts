@@ -306,25 +306,24 @@ export function createSupabaseResources(config: Environment): SupabaseResources 
         ),
       );
     },
-    async searchProximityDestinations(category, limit) {
-      let request = publicClient
-        .from('campus_destinations')
-        .select(campusColumns)
-        .eq('active', true)
-        .eq('searchable', true);
-      if (category === 'parking') {
-        request = request.eq('type', 'parking');
-      } else {
-        request = request.contains('metadata', {
-          categories: [category === 'food' ? 'dining' : category],
-        });
+    async listProximityDestinations() {
+      const rows: CampusDestinationRow[] = [];
+      const pageSize = 200;
+      for (let from = 0; ; from += pageSize) {
+        const { data, error } = await publicClient
+          .from('campus_destinations')
+          .select(campusColumns)
+          .eq('active', true)
+          .eq('searchable', true)
+          .order('id')
+          .range(from, from + pageSize - 1);
+        if (error !== null) throw error;
+        const page = data as unknown as CampusDestinationRow[];
+        rows.push(...page);
+        if (page.length < pageSize) break;
       }
-      const { data, error } = await request.limit(Math.min(limit, 100));
-      if (error !== null) throw error;
       return attachIndoorReferences(
-        (data as unknown as CampusDestinationRow[]).map((row) =>
-          mapCampusDestination(row),
-        ),
+        rows.map((row) => mapCampusDestination(row)),
       );
     },
     async findPlaceById(id) {

@@ -68,7 +68,6 @@ const ProximityQueries: Readonly<Record<string, ProximityIntent>> = {
 };
 
 const CampusSearchRadiusMeters = 2000;
-const ProximityCandidateLimit = 100;
 
 // Verified CSULB intent names whose canonical destination uses a different
 // current display name. Keep destination ownership in the database by
@@ -360,8 +359,14 @@ function proximityRelevance(
       return destination.type === 'parking' ? 1 : 0;
     case 'bus_stop':
       return categories.includes('bus_stop') ? 2 : 0;
-    case 'coffee':
-      return categories.includes('coffee') ? 2 : 0;
+    case 'coffee': {
+      if (categories.includes('coffee')) return 2;
+      const verifiedNames = [destination.name, ...destination.aliases].map(normalized);
+      return categories.includes('dining') &&
+        verifiedNames.some((name) => name.split(' ').includes('coffee'))
+        ? 1
+        : 0;
+    }
   }
 }
 
@@ -419,10 +424,7 @@ export function createCampusService(dependencies: CampusServiceDependencies) {
             message: 'Latitude and longitude are required for proximity search.',
           });
         }
-        const candidates = await dependencies.campusPlaces.searchProximityDestinations(
-          proximityIntent,
-          ProximityCandidateLimit,
-        );
+        const candidates = await dependencies.campusPlaces.listProximityDestinations();
         const ranked = candidates
           .filter((destination) => destination.active && destination.searchable)
           .map((destination) => ({
