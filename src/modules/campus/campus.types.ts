@@ -47,6 +47,10 @@ export interface CampusPlacesGateway {
     category: CampusCategorySearch,
     limit: number,
   ): Promise<CampusDestinationRecord[]>;
+  searchProximityDestinations(
+    category: ProximityIntent,
+    limit: number,
+  ): Promise<CampusDestinationRecord[]>;
   findPlaceById(id: string): Promise<CampusDestinationRecord | null>;
   findBuildingByCode(code: string): Promise<CampusDestinationRecord | null>;
   searchBuildingRooms(
@@ -80,6 +84,18 @@ export type ContainedDestinationCategory =
   | 'accessible_entrance'
   | 'restroom';
 
+export type ProximityIntent =
+  | 'restroom'
+  | 'food'
+  | 'parking'
+  | 'bus_stop'
+  | 'coffee';
+
+export interface UserLocation {
+  latitude: number;
+  longitude: number;
+}
+
 export interface PublicCampusResult {
   id: string;
   type: CampusDestinationType | 'external';
@@ -91,6 +107,7 @@ export interface PublicCampusResult {
   floorNumber?: string;
   external?: true;
   attribution?: string;
+  distanceMeters?: number;
   navigation?: {
     outdoorDestination?: { latitude: number; longitude: number };
     indoorDestinationId?: string;
@@ -100,4 +117,9 @@ export interface PublicCampusResult {
 export interface CampusSearchResponse {
   query: string;
   results: PublicCampusResult[];
+  proximity?: {
+    intent: ProximityIntent;
+    status: 'ok';
+    radiusMeters: number;
+  };
 }

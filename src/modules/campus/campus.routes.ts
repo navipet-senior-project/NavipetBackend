@@ -19,6 +19,19 @@ function requireMeaningfulQuery(query: string): void {
   }
 }
 
+function requireCoordinatePair(
+  latitude: number | undefined,
+  longitude: number | undefined,
+): void {
+  if ((latitude === undefined) !== (longitude === undefined)) {
+    throw new AppError({
+      code: ErrorCode.VALIDATION_ERROR,
+      statusCode: 422,
+      message: 'Latitude and longitude must be provided together.',
+    });
+  }
+}
+
 const campusRoutes: FastifyPluginCallbackTypebox = (fastify, _options, done) => {
   const service = createCampusService({
     campusPlaces: fastify.supabase,
@@ -30,8 +43,18 @@ const campusRoutes: FastifyPluginCallbackTypebox = (fastify, _options, done) => 
     { schema: AutocompleteRouteSchema },
     async (request) => {
       requireMeaningfulQuery(request.query.q);
+      requireCoordinatePair(request.query.latitude, request.query.longitude);
       try {
-        return await service.autocomplete(request.query.q, request.query.limit ?? 10);
+        return await service.autocomplete(
+          request.query.q,
+          request.query.limit ?? 10,
+          request.query.latitude === undefined || request.query.longitude === undefined
+            ? undefined
+            : {
+                latitude: request.query.latitude,
+                longitude: request.query.longitude,
+              },
+        );
       } catch (cause) {
         if (cause instanceof AppError) throw cause;
         throw new AppError({
