@@ -287,6 +287,27 @@ export function createSupabaseResources(config: Environment): SupabaseResources 
         ),
       );
     },
+    async searchProximityDestinations(category, limit) {
+      let request = publicClient
+        .from('campus_destinations')
+        .select(campusColumns)
+        .eq('active', true)
+        .eq('searchable', true);
+      if (category === 'parking') {
+        request = request.eq('type', 'parking');
+      } else {
+        request = request.contains('metadata', {
+          categories: [category === 'food' ? 'dining' : category],
+        });
+      }
+      const { data, error } = await request.limit(Math.min(limit, 100));
+      if (error !== null) throw error;
+      return attachIndoorReferences(
+        (data as unknown as CampusDestinationRow[]).map((row) =>
+          mapCampusDestination(row),
+        ),
+      );
+    },
     async findPlaceById(id) {
       const { data, error } = await publicClient
         .from('campus_destinations')

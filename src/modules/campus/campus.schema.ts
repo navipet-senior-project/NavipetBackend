@@ -32,6 +32,7 @@ export const PublicCampusResultSchema = Type.Object(
     floorNumber: Type.Optional(Type.String()),
     external: Type.Optional(Type.Literal(true)),
     attribution: Type.Optional(Type.String()),
+    distanceMeters: Type.Optional(Type.Integer({ minimum: 0 })),
     navigation: Type.Optional(
       Type.Object(
         {
@@ -49,6 +50,8 @@ const SearchQuerySchema = Type.Object(
   {
     q: Type.String({ minLength: 1, maxLength: 256 }),
     limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 20 })),
+    latitude: Type.Optional(Type.Number({ minimum: -90, maximum: 90 })),
+    longitude: Type.Optional(Type.Number({ minimum: -180, maximum: 180 })),
   },
   { additionalProperties: false },
 );
@@ -57,6 +60,22 @@ export const AutocompleteResponseSchema = Type.Object(
   {
     query: Type.String(),
     results: Type.Array(PublicCampusResultSchema),
+    proximity: Type.Optional(
+      Type.Object(
+        {
+          intent: Type.Union([
+            Type.Literal('restroom'),
+            Type.Literal('food'),
+            Type.Literal('parking'),
+            Type.Literal('bus_stop'),
+            Type.Literal('coffee'),
+          ]),
+          status: Type.Literal('ok'),
+          radiusMeters: Type.Integer({ minimum: 1 }),
+        },
+        { additionalProperties: false },
+      ),
+    ),
   },
   { $id: 'CampusAutocompleteResponse', additionalProperties: false },
 );
@@ -65,11 +84,11 @@ export const AutocompleteRouteSchema = {
   tags: ['Campus'],
   summary: 'Autocomplete campus destinations',
   description:
-    'Searches active, searchable CSULB destinations first. A temporary Mapbox result may be returned only when local search has no result.',
+    'Searches active, searchable CSULB destinations first. Proximity intents require latitude and longitude and never use external fallback. A temporary Mapbox result may be returned only when ordinary local search has no result.',
   querystring: SearchQuerySchema,
   response: {
     200: AutocompleteResponseSchema,
-    422: ErrorResponseSchema('Query or limit failed validation.'),
+    422: ErrorResponseSchema('Query, limit, or location failed validation.'),
     429: ErrorResponseSchema('Too many requests.'),
     502: ErrorResponseSchema('A required search provider is unavailable.'),
   },
