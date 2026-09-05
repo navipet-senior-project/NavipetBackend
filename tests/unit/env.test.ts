@@ -145,4 +145,33 @@ describe('parseEnv', () => {
     ).toThrow('Invalid environment configuration');
   });
 
+  it('accepts complete optional Mapbox Search Box configuration', () => {
+    const env = parseEnv({
+      ...required,
+      MAPBOX_ACCESS_TOKEN: 'pk.test-token',
+      MAPBOX_SEARCH_PROXIMITY: '-118.114,33.783',
+      MAPBOX_SEARCH_BBOX: '-118.13,33.77,-118.09,33.80',
+    });
+
+    expect(env).toMatchObject({
+      MAPBOX_ACCESS_TOKEN: 'pk.test-token',
+      MAPBOX_SEARCH_PROXIMITY: '-118.114,33.783',
+      MAPBOX_SEARCH_BBOX: '-118.13,33.77,-118.09,33.80',
+    });
+  });
+
+  it('rejects partial or malformed Mapbox Search Box configuration', () => {
+    expect(() =>
+      parseEnv({ ...required, MAPBOX_ACCESS_TOKEN: 'pk.test-token' }),
+    ).toThrow('Invalid environment configuration');
+    expect(() =>
+      parseEnv({
+        ...required,
+        MAPBOX_ACCESS_TOKEN: 'pk.test-token',
+        MAPBOX_SEARCH_PROXIMITY: 'bad',
+        MAPBOX_SEARCH_BBOX: '-118.13,33.77,-118.09,33.80',
+      }),
+    ).toThrow('Invalid environment configuration');
+  });
+
 });
