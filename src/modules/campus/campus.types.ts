@@ -47,10 +47,7 @@ export interface CampusPlacesGateway {
     category: CampusCategorySearch,
     limit: number,
   ): Promise<CampusDestinationRecord[]>;
-  searchProximityDestinations(
-    category: ProximityIntent,
-    limit: number,
-  ): Promise<CampusDestinationRecord[]>;
+  listProximityDestinations(): Promise<CampusDestinationRecord[]>;
   findPlaceById(id: string): Promise<CampusDestinationRecord | null>;
   findBuildingByCode(code: string): Promise<CampusDestinationRecord | null>;
   searchBuildingRooms(

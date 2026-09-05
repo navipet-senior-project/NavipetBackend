@@ -1,6 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { FastifyInstance } from 'fastify';
+import { Writable } from 'node:stream';
 
+import { buildApp } from '../../src/app.js';
 import type {
   CampusDestinationRecord,
   ExternalPlacesGateway,
@@ -79,7 +81,7 @@ function resources(
       );
     }),
     searchCategoryDestinations: vi.fn().mockResolvedValue([]),
-    searchProximityDestinations: vi.fn().mockResolvedValue([]),
+    listProximityDestinations: vi.fn().mockResolvedValue([]),
     findPlaceById: vi.fn((id: string) =>
       Promise.resolve(searchable.find((record) => record.id === id) ?? null),
     ),
@@ -379,7 +381,7 @@ describe('campus routes', () => {
     });
     app = await buildTestApp({}, {
       supabaseResources: resources({
-        searchProximityDestinations: vi.fn().mockResolvedValue([far, near]),
+        listProximityDestinations: vi.fn().mockResolvedValue([far, near]),
       }),
       externalPlaces: noExternal(),
     });
@@ -404,7 +406,7 @@ describe('campus routes', () => {
     const external = { searchExternalPlaces: vi.fn().mockResolvedValue([]) };
     app = await buildTestApp({}, {
       supabaseResources: resources({
-        searchProximityDestinations: vi.fn().mockResolvedValue([]),
+        listProximityDestinations: vi.fn().mockResolvedValue([]),
       }),
       externalPlaces: external,
     });
@@ -420,5 +422,34 @@ describe('campus routes', () => {
       results: [],
     });
     expect(external.searchExternalPlaces).not.toHaveBeenCalled();
+  });
+
+  it('redacts precise coordinates from autocomplete request logs', async () => {
+    let output = '';
+    const stream = new Writable({
+      write(chunk: Buffer, _encoding, callback) {
+        output += chunk.toString();
+        callback();
+      },
+    });
+    app = await buildApp({
+      env: TEST_ENV,
+      logger: { level: 'info', stream },
+      supabaseResources: resources(),
+      externalPlaces: noExternal(),
+    });
+
+    await app.inject({
+      method: 'GET',
+      url: '/autocomplete?q=nearest%20parking&latitude=33.7838&longitude=-118.1141',
+    });
+    await app.inject({
+      method: 'GET',
+      url: '/autocomplete?q=nearest%20parking&lat%69tude=33.7838&long%69tude=-118.1141',
+    });
+
+    expect(output).not.toContain('33.7838');
+    expect(output).not.toContain('-118.1141');
+    expect(output).toContain('[REDACTED]');
   });
 });
