@@ -103,6 +103,7 @@ describe('auth route rate limits', () => {
         .fn()
         .mockResolvedValue('11111111-1111-4111-8111-111111111111'),
       requestPasswordReset: vi.fn().mockResolvedValue(undefined),
+      createRecoveryIntent: vi.fn().mockResolvedValue(undefined),
     };
     app = await buildTestApp(
       { AUTH_FORGOT_PASSWORD_RATE_LIMIT_MAX: 1 },

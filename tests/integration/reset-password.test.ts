@@ -13,9 +13,7 @@ const anyString = expect.any(String) as unknown;
 const verifiedUser = {
   id: '11111111-1111-4111-8111-111111111111',
   email: 'student@example.com',
-  // Supabase mints an 'otp' amr method for a code-verified session; there is no
-  // distinct 'recovery' method.
-  authenticationMethods: ['otp'],
+  sessionPurpose: 'recovery' as const,
 };
 const validPayload = { newPassword: 'Password1', confirmPassword: 'Password1' };
 
@@ -26,7 +24,11 @@ function verifiedVerifier(): JwtVerifier {
 function buildAppWithUpdatePassword(
   updatePassword: ReturnType<typeof vi.fn<PasswordUpdateGateway['updatePassword']>>,
 ) {
-  const supabaseResources = { ...createSupabaseResources(TEST_ENV), updatePassword };
+  const supabaseResources = {
+    ...createSupabaseResources(TEST_ENV),
+    updatePassword,
+    adminSignOut: vi.fn().mockResolvedValue(undefined),
+  };
   return buildTestApp(
     {},
     { supabaseResources, authVerifier: verifiedVerifier() },
@@ -56,6 +58,32 @@ describe('reset password', () => {
     expect(response.statusCode).toBe(204);
     expect(response.body).toBe('');
     expect(updatePassword).toHaveBeenCalledWith('recovery-access-token', 'Password1');
+  });
+
+  it('revokes the recovery session after changing the password', async () => {
+    const updatePassword = vi
+      .fn<PasswordUpdateGateway['updatePassword']>()
+      .mockResolvedValue(undefined);
+    const adminSignOut = vi.fn().mockResolvedValue(undefined);
+    const supabaseResources = {
+      ...createSupabaseResources(TEST_ENV),
+      updatePassword,
+      adminSignOut,
+    };
+    app = await buildTestApp(
+      {},
+      { supabaseResources, authVerifier: verifiedVerifier() },
+    );
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/auth/reset-password',
+      headers: { authorization: 'Bearer recovery-access-token' },
+      payload: validPayload,
+    });
+
+    expect(response.statusCode).toBe(204);
+    expect(adminSignOut).toHaveBeenCalledWith('recovery-access-token', 'local');
   });
 
   it('returns 401 INVALID_ACCESS_TOKEN without a bearer token', async () => {
@@ -88,7 +116,7 @@ describe('reset password', () => {
         authVerifier: {
           verify: vi.fn().mockResolvedValue({
             ...verifiedUser,
-            authenticationMethods: ['password'],
+            sessionPurpose: 'standard',
           }),
         },
       },

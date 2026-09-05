@@ -10,6 +10,7 @@ declare module 'fastify' {
     config: Environment;
     supabase: SupabaseResources;
     authenticate: preHandlerAsyncHookHandler;
+    authenticateRecovery: preHandlerAsyncHookHandler;
   }
 
   interface FastifyRequest {

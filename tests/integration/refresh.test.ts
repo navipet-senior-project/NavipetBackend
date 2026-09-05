@@ -73,6 +73,23 @@ describe('refresh', () => {
     });
   });
 
+  it('returns 401 INVALID_REFRESH_TOKEN when Supabase marks the session non-refreshable', async () => {
+    const refreshSession = vi
+      .fn()
+      .mockRejectedValue({ code: 'session_purpose_not_refreshable' });
+    const supabaseResources = { ...createSupabaseResources(TEST_ENV), refreshSession };
+    app = await buildTestApp({}, { supabaseResources });
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/auth/refresh',
+      payload: { refreshToken: 'recovery-refresh-token' },
+    });
+
+    expect(response.statusCode).toBe(401);
+    expect(response.json()).toMatchObject({ error: { code: 'INVALID_REFRESH_TOKEN' } });
+  });
+
   it('returns 401 INVALID_REFRESH_TOKEN for an expired session', async () => {
     const refreshSession = vi
       .fn()

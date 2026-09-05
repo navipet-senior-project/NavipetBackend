@@ -22,6 +22,16 @@ async function protectedApp(verifier: JwtVerifier): Promise<FastifyInstance> {
   return app;
 }
 
+async function recoveryOnlyApp(verifier: JwtVerifier): Promise<FastifyInstance> {
+  const app = await buildTestApp({}, { authVerifier: verifier });
+  app.get(
+    '/__test/recovery-only',
+    { preHandler: app.authenticateRecovery },
+    (request) => ({ user: request.user }),
+  );
+  return app;
+}
+
 describe('authentication guard', () => {
   let app: FastifyInstance | undefined;
 
@@ -62,6 +72,7 @@ describe('authentication guard', () => {
       verify: vi.fn<JwtVerifier['verify']>().mockResolvedValue({
         id: '11111111-1111-4111-8111-111111111111',
         email: 'student@example.com',
+        sessionPurpose: 'standard',
       }),
     };
     app = await protectedApp(verifier);
@@ -77,6 +88,7 @@ describe('authentication guard', () => {
       user: {
         id: '11111111-1111-4111-8111-111111111111',
         email: 'student@example.com',
+        sessionPurpose: 'standard',
       },
     });
     expect(response.body).not.toContain('signed-token');
@@ -87,6 +99,7 @@ describe('authentication guard', () => {
     const verifier: JwtVerifier = {
       verify: vi.fn<JwtVerifier['verify']>().mockResolvedValue({
         id: '22222222-2222-4222-8222-222222222222',
+        sessionPurpose: 'standard',
       }),
     };
     app = await protectedApp(verifier);
@@ -99,8 +112,44 @@ describe('authentication guard', () => {
 
     expect(response.statusCode).toBe(200);
     expect(response.json()).toEqual({
-      user: { id: '22222222-2222-4222-8222-222222222222' },
+      user: { id: '22222222-2222-4222-8222-222222222222', sessionPurpose: 'standard' },
     });
+  });
+
+  it('rejects a recovery session on an ordinary protected route', async () => {
+    const verifier: JwtVerifier = {
+      verify: vi.fn<JwtVerifier['verify']>().mockResolvedValue({
+        id: '22222222-2222-4222-8222-222222222222',
+        sessionPurpose: 'recovery',
+      }),
+    };
+    app = await protectedApp(verifier);
+
+    const response = await app.inject({
+      method: 'GET',
+      url: '/__test/protected',
+      headers: { authorization: 'Bearer recovery-token' },
+    });
+
+    expect(response.statusCode).toBe(401);
+  });
+
+  it('accepts a recovery session only on a recovery-only route', async () => {
+    const verifier: JwtVerifier = {
+      verify: vi.fn<JwtVerifier['verify']>().mockResolvedValue({
+        id: '22222222-2222-4222-8222-222222222222',
+        sessionPurpose: 'recovery',
+      }),
+    };
+    app = await recoveryOnlyApp(verifier);
+
+    const response = await app.inject({
+      method: 'GET',
+      url: '/__test/recovery-only',
+      headers: { authorization: 'Bearer recovery-token' },
+    });
+
+    expect(response.statusCode).toBe(200);
   });
 
   it('normalizes a gateway AppError to a safe unauthorized response', async () => {
@@ -152,6 +201,7 @@ describe('SupabaseJwtVerifier', () => {
       { method: 'recovery', timestamp: 1_900_000_000 },
       { method: 'otp', timestamp: 1_899_999_999 },
     ],
+    session_purpose: 'standard',
   };
 
   it('maps valid verified claims', async () => {
@@ -166,6 +216,7 @@ describe('SupabaseJwtVerifier', () => {
       id: validClaims.sub,
       email: validClaims.email,
       authenticationMethods: ['recovery', 'otp'],
+      sessionPurpose: 'standard',
     });
   });
 

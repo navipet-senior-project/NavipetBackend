@@ -56,9 +56,9 @@ SUPABASE_JWT_ISSUER=https://<project-ref>.supabase.co/auth/v1
 SUPABASE_JWT_AUDIENCE=authenticated
 ```
 
-The publishable key belongs in `SUPABASE_ANON_KEY`. Leave
-`SUPABASE_SERVICE_ROLE_KEY` empty unless you are explicitly testing an
-administrative server operation.
+The publishable key belongs in `SUPABASE_ANON_KEY`. `SUPABASE_SERVICE_ROLE_KEY`
+is required by the server's password-reset completion flow to revoke the used
+recovery session; never expose it to a client.
 
 Start the development server:
 
@@ -93,6 +93,18 @@ Supabase Auth is the only identity provider.
 5. The backend validates the subject UUID, issuer, audience, and expiration.
 6. A successful check stores the trusted user identity and original access
    token on the Fastify request for protected handlers.
+
+Password-recovery sessions are purpose-scoped. Apply the SQL migrations in
+order—[`20260904`](supabase/migrations/20260904_add_recovery_session_purpose_hook.sql),
+[`20260905`](supabase/migrations/20260905_classify_recovery_otp_sessions.sql),
+then [`20260906`](supabase/migrations/20260906_persist_standard_otp_sessions.sql)—in
+the Supabase SQL Editor, then configure `public.custom_access_token_hook` as
+**Authentication > Hooks > Custom Access Token Hook**. The backend records a
+short-lived recovery intent after it sends a reset email; the hook consumes that
+intent when it issues the OTP session and adds a signed `session_purpose` claim.
+Ordinary API routes require `standard`, while only `POST /auth/reset-password`
+accepts `recovery`. The server rejects refresh for non-standard sessions and
+revokes the recovery session after a successful password change.
 
 Missing, malformed, expired, or otherwise invalid credentials return a generic
 `401 Authentication required` response. The backend never accepts a user ID

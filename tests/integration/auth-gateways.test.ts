@@ -25,6 +25,10 @@ function jsonResponse(body: unknown, status = 200): Response {
   });
 }
 
+function accessTokenWithPurpose(purpose: string): string {
+  return `header.${Buffer.from(JSON.stringify({ session_purpose: purpose })).toString('base64url')}.signature`;
+}
+
 describe('signUp gateway', () => {
   it('returns tokens when Supabase issues a session immediately', async () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
@@ -119,7 +123,7 @@ describe('refreshSession gateway', () => {
   it('returns a rotated token pair on success', async () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
       jsonResponse({
-        access_token: 'new-access-token',
+        access_token: accessTokenWithPurpose('standard'),
         token_type: 'bearer',
         expires_in: 900,
         expires_at: 2_000_000_000,
@@ -130,9 +134,27 @@ describe('refreshSession gateway', () => {
     const resources = createSupabaseResources(TEST_ENV);
 
     await expect(resources.refreshSession('old-refresh-token')).resolves.toEqual({
-      accessToken: 'new-access-token',
+      accessToken: accessTokenWithPurpose('standard'),
       refreshToken: 'new-refresh-token',
       userId: baseUser.id,
+    });
+  });
+
+  it('rejects a recovery session after Supabase rotates its refresh token', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+      jsonResponse({
+        access_token: accessTokenWithPurpose('recovery'),
+        token_type: 'bearer',
+        expires_in: 900,
+        expires_at: 2_000_000_000,
+        refresh_token: 'rotated-recovery-refresh-token',
+        user: baseUser,
+      }),
+    );
+    const resources = createSupabaseResources(TEST_ENV);
+
+    await expect(resources.refreshSession('recovery-refresh-token')).rejects.toMatchObject({
+      code: 'session_purpose_not_refreshable',
     });
   });
 
@@ -286,6 +308,38 @@ describe('requestPasswordReset gateway', () => {
     await expect(
       resources.requestPasswordReset('student@example.com'),
     ).rejects.toMatchObject({ code: 'over_email_send_rate_limit' });
+  });
+});
+
+describe('createRecoveryIntent gateway', () => {
+  it('requires server-only admin credentials', async () => {
+    const resources = createSupabaseResources(TEST_ENV);
+
+    await expect(resources.createRecoveryIntent(baseUser.id)).rejects.toMatchObject({
+      statusCode: 503,
+    });
+  });
+
+  it('upserts a one-hour recovery intent using the admin client', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(jsonResponse([]));
+    const resources = createSupabaseResources({
+      ...TEST_ENV,
+      SUPABASE_SERVICE_ROLE_KEY: 'test-service-role-key',
+    });
+
+    await resources.createRecoveryIntent(baseUser.id);
+
+    const [url, init] = fetchSpy.mock.calls[0] as [string, RequestInit];
+    expect(url).toContain('/rest/v1/auth_recovery_intents');
+    expect(new Headers(init.headers).get('authorization')).toBe(
+      'Bearer test-service-role-key',
+    );
+    const body = JSON.parse(init.body as string) as {
+      user_id: string;
+      expires_at: string;
+    };
+    expect(body.user_id).toBe(baseUser.id);
+    expect(Date.parse(body.expires_at)).toBeGreaterThan(Date.now());
   });
 });
 

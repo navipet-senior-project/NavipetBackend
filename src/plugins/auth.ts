@@ -32,6 +32,13 @@ const ClaimsSchema = Type.Object(
         ),
       ),
     ),
+    session_purpose: Type.Optional(
+      Type.Union([
+        Type.Literal('standard'),
+        Type.Literal('recovery'),
+        Type.Literal('unclassified_otp'),
+      ]),
+    ),
   },
   { additionalProperties: true },
 );
@@ -42,6 +49,7 @@ export interface AuthenticatedUser {
   id: string;
   email?: string;
   authenticationMethods?: string[];
+  sessionPurpose?: 'standard' | 'recovery' | 'unclassified_otp';
 }
 
 export interface JwtVerifier {
@@ -88,6 +96,9 @@ export class SupabaseJwtVerifier implements JwtVerifier {
           : {
               authenticationMethods: claims.amr.map((entry) => entry.method),
             }),
+        ...(claims.session_purpose === undefined
+          ? {}
+          : { sessionPurpose: claims.session_purpose }),
       };
     } catch (cause) {
       throw unauthorized(cause);
@@ -114,11 +125,22 @@ const authPlugin: FastifyPluginAsync<AuthPluginOptions> = (
 
   const authenticate: preHandlerAsyncHookHandler = async (request) => {
     const accessToken = bearerToken(request);
-    request.user = await options.verifier.verify(accessToken);
+    const user = await options.verifier.verify(accessToken);
+    if (user.sessionPurpose !== 'standard') throw unauthorized();
+    request.user = user;
+    request.accessToken = accessToken;
+  };
+
+  const authenticateRecovery: preHandlerAsyncHookHandler = async (request) => {
+    const accessToken = bearerToken(request);
+    const user = await options.verifier.verify(accessToken);
+    if (user.sessionPurpose !== 'recovery') throw unauthorized();
+    request.user = user;
     request.accessToken = accessToken;
   };
 
   fastify.decorate('authenticate', authenticate);
+  fastify.decorate('authenticateRecovery', authenticateRecovery);
   return Promise.resolve();
 };
 
