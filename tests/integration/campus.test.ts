@@ -206,8 +206,8 @@ describe('campus routes', () => {
     expect(response.json()).toEqual({ query: 'zzzzzz', results: [] });
   });
 
-  it.each(['/autocomplete', '/autocomplete?q=', '/autocomplete?q=x', '/autocomplete?q=---'])(
-    'rejects an empty or one-character query: %s',
+  it.each(['/autocomplete', '/autocomplete?q=', '/autocomplete?q=---'])(
+    'rejects an empty query: %s',
     async (url) => {
       app = await buildTestApp({}, { supabaseResources: resources(), externalPlaces: noExternal() });
       const response = await app.inject({ method: 'GET', url });
@@ -215,6 +215,14 @@ describe('campus routes', () => {
       expect(response.json()).toMatchObject({ error: { code: 'VALIDATION_ERROR' } });
     },
   );
+
+  it('accepts a one-character autocomplete query', async () => {
+    app = await buildTestApp({}, { supabaseResources: resources(), externalPlaces: noExternal() });
+
+    const response = await app.inject({ method: 'GET', url: '/autocomplete?q=x' });
+
+    expect(response.statusCode).toBe(200);
+  });
 
   it('rejects an excessive limit', async () => {
     app = await buildTestApp({}, { supabaseResources: resources(), externalPlaces: noExternal() });
