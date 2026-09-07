@@ -13,6 +13,7 @@ import type {
   CampusCategorySearch,
   CampusDestinationRecord,
   CampusPlacesGateway,
+  PublicCampusResult,
 } from '../modules/campus/campus.types.js';
 import { attachIndoorDestinationIds } from '../modules/campus/campus.service.js';
 
@@ -133,6 +134,17 @@ export interface UserEmailLookupGateway {
   findUserIdByEmail(email: string): Promise<string | null>;
 }
 
+export interface RecentSearch {
+  place: PublicCampusResult;
+  searchedAt: string;
+}
+
+export interface RecentSearchGateway {
+  saveRecentSearch(accessToken: string, place: PublicCampusResult): Promise<void>;
+  listRecentSearches(accessToken: string, limit: number): Promise<RecentSearch[]>;
+  clearRecentSearches(accessToken: string): Promise<void>;
+}
+
 export interface SupabaseResources
   extends ClaimsGateway,
     PasswordLoginGateway,
@@ -145,7 +157,8 @@ export interface SupabaseResources
     RecoveryIntentGateway,
     OtpVerificationGateway,
     PasswordUpdateGateway,
-    CampusPlacesGateway {
+    CampusPlacesGateway,
+    RecentSearchGateway {
   publicClient: SupabaseClient;
   adminClient: SupabaseClient | null;
   forAccessToken(accessToken: string): SupabaseClient;
@@ -248,14 +261,66 @@ export function createSupabaseResources(config: Environment): SupabaseResources 
     );
   }
 
+  function forAccessToken(accessToken: string) {
+    return createClient(config.SUPABASE_URL, config.SUPABASE_ANON_KEY, {
+      ...noSession,
+      global: { headers: { Authorization: `Bearer ${accessToken}` } },
+    });
+  }
+
   return {
     publicClient,
     adminClient,
     forAccessToken(accessToken) {
-      return createClient(config.SUPABASE_URL, config.SUPABASE_ANON_KEY, {
-        ...noSession,
-        global: { headers: { Authorization: `Bearer ${accessToken}` } },
-      });
+      return forAccessToken(accessToken);
+    },
+    async saveRecentSearch(accessToken, place) {
+      const { error } = await forAccessToken(accessToken)
+        .from('recent_searches')
+        .upsert(
+          {
+            place_id: place.id,
+            type: place.type,
+            title: place.title,
+            subtitle: place.subtitle,
+            source: place.source,
+            searched_at: new Date().toISOString(),
+          },
+          { onConflict: 'user_id,place_id' },
+        );
+      if (error !== null) throw error;
+    },
+    async listRecentSearches(accessToken, limit) {
+      const { data, error } = await forAccessToken(accessToken)
+        .from('recent_searches')
+        .select('place_id,type,title,subtitle,source,searched_at')
+        .order('searched_at', { ascending: false })
+        .limit(Math.min(limit, 20));
+      if (error !== null) throw error;
+      return (data as Array<{
+        place_id: string;
+        type: PublicCampusResult['type'];
+        title: string;
+        subtitle: string;
+        source: string;
+        searched_at: string;
+      }>).map((row) => ({
+        place: {
+          id: row.place_id,
+          type: row.type,
+          title: row.title,
+          subtitle: row.subtitle,
+          source: row.source,
+        },
+        searchedAt: row.searched_at,
+      }));
+    },
+    async clearRecentSearches(accessToken) {
+      const { error } = await forAccessToken(accessToken)
+        .from('recent_searches')
+        .delete()
+        .gte('searched_at', '0001-01-01T00:00:00.000Z');
+      if (error !== null) throw error;
     },
     async searchDestinations(query, limit) {
       const response = (await publicClient.rpc(

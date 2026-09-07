@@ -9,6 +9,7 @@ import { parseEnv, type Environment } from './config/env.js';
 import authRoutes from './modules/auth/auth.routes.js';
 import healthRoutes from './modules/health/health.routes.js';
 import campusRoutes from './modules/campus/campus.routes.js';
+import recentSearchesRoutes from './modules/recent-searches/recent-searches.routes.js';
 import authPlugin, {
   SupabaseJwtVerifier,
   type JwtVerifier,
@@ -86,6 +87,7 @@ export async function buildApp(
   await app.register(authPlugin, authOptions);
   await app.register(authRoutes);
   await app.register(campusRoutes);
+  await app.register(recentSearchesRoutes);
   await app.register(healthRoutes);
 
   return app;
