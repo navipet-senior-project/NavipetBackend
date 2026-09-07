@@ -10,11 +10,11 @@ import {
 } from './campus.schema.js';
 
 function requireMeaningfulQuery(query: string): void {
-  if (normalizeCampusQuery(query).meaningfulLength === 0) {
+  if (normalizeCampusQuery(query).meaningfulLength < 2) {
     throw new AppError({
       code: ErrorCode.VALIDATION_ERROR,
       statusCode: 422,
-      message: 'Query must contain a meaningful character.',
+      message: 'Query must contain at least two meaningful characters.',
     });
   }
 }

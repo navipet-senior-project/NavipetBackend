@@ -70,7 +70,7 @@ function building(overrides: Partial<Record<string, string>> = {}): string {
 }
 
 describe('prepareCampusPlaces', () => {
-  test('keeps a routable outdoor destination for Horn Center', () => {
+  test('does not persist a temporary Mapbox coordinate for Horn Center', () => {
     const csv = readFileSync(
       fileURLToPath(new URL('../../data/csulb-campus-places.csv', import.meta.url)),
       'utf8',
@@ -81,8 +81,8 @@ describe('prepareCampusPlaces', () => {
 
     expect(hornCenter).toMatchObject({
       name: 'Steve and Nini Horn Center',
-      outdoor_destination_latitude: 33.78307046,
-      outdoor_destination_longitude: -118.11456126,
+      outdoor_destination_latitude: null,
+      outdoor_destination_longitude: null,
     });
   });
 
