@@ -309,7 +309,9 @@ describe('campus autocomplete service', () => {
   });
 
   it('does not call external fallback when local results exist or for room intents', async () => {
-    const localDeps = gateways([destination()]);
+    const localDeps = gateways([
+      destination({ latitude: 33.7832, longitude: -118.1147 }),
+    ]);
     const localExternalSearch = vi.fn().mockResolvedValue([]);
     localDeps.externalPlaces.searchExternalPlaces = localExternalSearch;
     await createCampusService(localDeps).autocomplete('COB', 10);
@@ -351,6 +353,44 @@ describe('campus autocomplete service', () => {
         attribution: '© Mapbox and its suppliers',
         navigation: {
           outdoorDestination: { latitude: 33.782, longitude: -118.115 },
+        },
+      },
+    ]);
+  });
+
+  it('falls back to a routable external result when a local match has no outdoor coordinate', async () => {
+    const hornCenter = destination({
+      id: '00000000-0000-4000-8000-000000000026',
+      name: 'Steve and Nini Horn Center',
+      code: 'HC',
+      buildingCode: 'HC',
+      aliases: ['Horn Center'],
+    });
+    const deps = gateways([hornCenter]);
+    const externalSearch = vi.fn().mockResolvedValue([
+      {
+        id: 'mapbox.horn-center',
+        name: 'Steve and Nini Horn Center',
+        description: 'CSULB, Long Beach, California',
+        latitude: 33.784,
+        longitude: -118.114,
+      },
+    ]);
+    deps.externalPlaces.searchExternalPlaces = externalSearch;
+
+    const result = await createCampusService(deps).autocomplete('Horn Center', 10);
+
+    expect(externalSearch).toHaveBeenCalledWith('Horn Center', 10);
+    expect(result.results).toEqual([
+      {
+        id: 'mapbox:mapbox.horn-center',
+        type: 'external',
+        title: 'Steve and Nini Horn Center',
+        subtitle: 'CSULB, Long Beach, California',
+        source: 'mapbox',
+        external: true,
+        navigation: {
+          outdoorDestination: { latitude: 33.784, longitude: -118.114 },
         },
       },
     ]);

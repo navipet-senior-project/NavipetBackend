@@ -10,11 +10,11 @@ Add a `campus` feature module with route schemas, handlers, and a focused servic
 
 Local autocomplete calls `search_campus_destinations`, then normalizes and reranks returned records. Room-shaped queries resolve the building and query actual room children; they never synthesize room records. If no room exists, the resolved building may be returned as a labeled alternative.
 
-Mapbox fallback uses Search Box `/forward`, not `/suggest`. `/forward` is a one-request search endpoint and therefore has no interactive session-token contract. Results remain temporary, are labeled external, and are never written to Supabase.
+Mapbox fallback uses Search Box `/forward`, not `/suggest`, when ordinary local search has no routable outdoor destination. `/forward` is a one-request search endpoint and therefore has no interactive session-token contract. Results remain temporary, are labeled external, and are never written to Supabase.
 
 ## HTTP Contract
 
-- `GET /autocomplete?q=<query>&limit=10`: public search; `q` needs two meaningful alphanumeric characters; limit defaults to 10 and is capped at 20.
+- `GET /autocomplete?q=<query>&limit=10`: public search; `q` needs one meaningful alphanumeric character; limit defaults to 10 and is capped at 20.
 - `GET /places/:placeId`: public lookup of one active, searchable UUID; missing records return 404.
 - `GET /buildings/:buildingCode/rooms?q=<query>`: public search of verified room children under an active, searchable building; unknown buildings return 404.
 

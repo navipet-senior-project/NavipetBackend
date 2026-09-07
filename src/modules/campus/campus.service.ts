@@ -4,6 +4,7 @@ import type {
   CampusPlacesGateway,
   CampusSearchResponse,
   ContainedDestinationCategory,
+  ExternalPlaceRecord,
   ExternalPlacesGateway,
   PublicCampusResult,
   ProximityIntent,
@@ -347,6 +348,33 @@ function coordinatesFor(
     : null;
 }
 
+function hasOutdoorDestination(result: PublicCampusResult): boolean {
+  return result.navigation?.outdoorDestination !== undefined;
+}
+
+function externalResults(
+  places: ExternalPlaceRecord[],
+  limit: number,
+): PublicCampusResult[] {
+  return places.slice(0, limit).map((place) => ({
+    id: `mapbox:${place.id}`,
+    type: 'external',
+    title: place.name,
+    subtitle: place.description,
+    source: 'mapbox',
+    external: true,
+    ...(place.attribution === undefined
+      ? {}
+      : { attribution: place.attribution }),
+    navigation: {
+      outdoorDestination: {
+        latitude: place.latitude,
+        longitude: place.longitude,
+      },
+    },
+  }));
+}
+
 function proximityRelevance(
   destination: CampusDestinationRecord,
   intent: ProximityIntent,
@@ -569,31 +597,19 @@ export function createCampusService(dependencies: CampusServiceDependencies) {
         )
         .slice(0, limit)
         .map(({ destination }) => toPublicCampusResult(destination));
-      if (ranked.length > 0) return { query: query.display, results: ranked };
+      const routableLocal = ranked.filter(hasOutdoorDestination);
+      if (routableLocal.length > 0) {
+        return { query: query.display, results: routableLocal };
+      }
 
       const external = await dependencies.externalPlaces.searchExternalPlaces(
         query.display,
         limit,
       );
+      const routableExternal = externalResults(external, limit);
       return {
         query: query.display,
-        results: external.slice(0, limit).map((place) => ({
-          id: `mapbox:${place.id}`,
-          type: 'external',
-          title: place.name,
-          subtitle: place.description,
-          source: 'mapbox',
-          external: true,
-          ...(place.attribution === undefined
-            ? {}
-            : { attribution: place.attribution }),
-          navigation: {
-            outdoorDestination: {
-              latitude: place.latitude,
-              longitude: place.longitude,
-            },
-          },
-        })),
+        results: routableExternal.length === 0 ? ranked : routableExternal,
       };
     },
     async findPlace(id: string): Promise<PublicCampusResult | null> {

@@ -85,7 +85,7 @@ export const AutocompleteRouteSchema = {
   tags: ['Campus'],
   summary: 'Autocomplete campus destinations',
   description:
-    'Searches active, searchable CSULB destinations first. Proximity intents require latitude and longitude and never use external fallback. A temporary Mapbox result may be returned only when ordinary local search has no result.',
+    'Searches active, searchable CSULB destinations first. Proximity intents require latitude and longitude and never use external fallback. A temporary Mapbox result may be returned when ordinary local search has no routable outdoor destination.',
   querystring: SearchQuerySchema,
   response: {
     200: AutocompleteResponseSchema,

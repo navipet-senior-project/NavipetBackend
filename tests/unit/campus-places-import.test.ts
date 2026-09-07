@@ -1,3 +1,6 @@
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+
 import { describe, expect, test } from 'vitest';
 
 import {
@@ -67,6 +70,22 @@ function building(overrides: Partial<Record<string, string>> = {}): string {
 }
 
 describe('prepareCampusPlaces', () => {
+  test('does not persist a temporary Mapbox coordinate for Horn Center', () => {
+    const csv = readFileSync(
+      fileURLToPath(new URL('../../data/csulb-campus-places.csv', import.meta.url)),
+      'utf8',
+    );
+    const hornCenter = prepareCampusPlaces(csv).destinations.find(
+      (destination) => destination.code === 'HC',
+    );
+
+    expect(hornCenter).toMatchObject({
+      name: 'Steve and Nini Horn Center',
+      outdoor_destination_latitude: null,
+      outdoor_destination_longitude: null,
+    });
+  });
+
   test('normalizes canonical fields while preserving the cleaned display name', () => {
     const prepared = prepareCampusPlaces(`${HEADER}\n${building()}\n`);
 
