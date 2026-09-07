@@ -12,6 +12,10 @@ import type {
 } from './campus.types.js';
 import { AppError } from '../../common/errors/app-error.js';
 import { ErrorCode } from '../../common/errors/error-codes.js';
+import {
+  createOutdoorFallbackResolver,
+  type ResolvedOutdoorDestination,
+} from './outdoor-fallback.js';
 
 interface RoomIntent {
   buildingQuery: string;
@@ -352,6 +356,25 @@ function hasOutdoorDestination(result: PublicCampusResult): boolean {
   return result.navigation?.outdoorDestination !== undefined;
 }
 
+function withDerivedOutdoorDestination(
+  result: PublicCampusResult,
+  outdoor: ResolvedOutdoorDestination,
+): PublicCampusResult {
+  return {
+    ...result,
+    ...(outdoor.attribution === undefined
+      ? {}
+      : { attribution: outdoor.attribution }),
+    navigation: {
+      ...result.navigation,
+      outdoorDestination: {
+        latitude: outdoor.latitude,
+        longitude: outdoor.longitude,
+      },
+    },
+  };
+}
+
 function externalResults(
   places: ExternalPlaceRecord[],
   limit: number,
@@ -440,6 +463,9 @@ function rankRooms(
 }
 
 export function createCampusService(dependencies: CampusServiceDependencies) {
+  const outdoorFallback = createOutdoorFallbackResolver(
+    dependencies.externalPlaces,
+  );
   return {
     async autocomplete(
       input: string,
@@ -580,7 +606,7 @@ export function createCampusService(dependencies: CampusServiceDependencies) {
         category === undefined
           ? await dependencies.campusPlaces.searchDestinations(query.normalized, limit)
           : await dependencies.campusPlaces.searchCategoryDestinations(category, limit);
-      const ranked = local
+      const rankedDestinations = local
         .filter((destination) => destination.active && destination.searchable)
         .filter((destination) => category === undefined || matchesCategory(destination, category))
         .map((destination) => ({
@@ -596,10 +622,31 @@ export function createCampusService(dependencies: CampusServiceDependencies) {
             left.destination.name.localeCompare(right.destination.name),
         )
         .slice(0, limit)
-        .map(({ destination }) => toPublicCampusResult(destination));
+        .map(({ destination }) => destination);
+      const ranked = rankedDestinations.map((destination) =>
+        toPublicCampusResult(destination),
+      );
       const routableLocal = ranked.filter(hasOutdoorDestination);
       if (routableLocal.length > 0) {
         return { query: query.display, results: routableLocal };
+      }
+
+      // Canonical records own the destination identity, so derive their missing
+      // coordinates before substituting an external place for them.
+      const derived = await outdoorFallback.resolveAll(rankedDestinations);
+      if (derived.size > 0) {
+        const routableDerived = rankedDestinations
+          .map((destination, index) => {
+            const outdoor = derived.get(destination.id);
+            const result = ranked[index] as PublicCampusResult;
+            return outdoor === undefined
+              ? result
+              : withDerivedOutdoorDestination(result, outdoor);
+          })
+          .filter(hasOutdoorDestination);
+        if (routableDerived.length > 0) {
+          return { query: query.display, results: routableDerived };
+        }
       }
 
       const external = await dependencies.externalPlaces.searchExternalPlaces(
@@ -614,9 +661,13 @@ export function createCampusService(dependencies: CampusServiceDependencies) {
     },
     async findPlace(id: string): Promise<PublicCampusResult | null> {
       const place = await dependencies.campusPlaces.findPlaceById(id);
-      return place === null || !place.active || !place.searchable
-        ? null
-        : toPublicCampusResult(place);
+      if (place === null || !place.active || !place.searchable) return null;
+      const result = toPublicCampusResult(place);
+      if (hasOutdoorDestination(result)) return result;
+      const outdoor = await outdoorFallback.resolve(place);
+      return outdoor === null
+        ? result
+        : withDerivedOutdoorDestination(result, outdoor);
     },
     async searchRooms(buildingCode: string, input: string, limit: number) {
       const building = await dependencies.campusPlaces.findBuildingByCode(

@@ -358,7 +358,7 @@ describe('campus autocomplete service', () => {
     ]);
   });
 
-  it('falls back to a routable external result when a local match has no outdoor coordinate', async () => {
+  it('keeps the canonical record and attaches external coordinates when it has none', async () => {
     const hornCenter = destination({
       id: '00000000-0000-4000-8000-000000000026',
       name: 'Steve and Nini Horn Center',
@@ -374,26 +374,178 @@ describe('campus autocomplete service', () => {
         description: 'CSULB, Long Beach, California',
         latitude: 33.784,
         longitude: -118.114,
+        attribution: '© Mapbox and its suppliers',
       },
     ]);
     deps.externalPlaces.searchExternalPlaces = externalSearch;
 
     const result = await createCampusService(deps).autocomplete('Horn Center', 10);
 
-    expect(externalSearch).toHaveBeenCalledWith('Horn Center', 10);
+    expect(externalSearch).toHaveBeenCalledWith('Steve and Nini Horn Center', 5);
     expect(result.results).toEqual([
       {
-        id: 'mapbox:mapbox.horn-center',
-        type: 'external',
+        id: hornCenter.id,
+        type: 'building',
         title: 'Steve and Nini Horn Center',
-        subtitle: 'CSULB, Long Beach, California',
-        source: 'mapbox',
-        external: true,
+        subtitle: 'HC',
+        source: 'csulb_building_names_codes',
+        buildingCode: 'HC',
+        attribution: '© Mapbox and its suppliers',
         navigation: {
           outdoorDestination: { latitude: 33.784, longitude: -118.114 },
         },
       },
     ]);
+  });
+
+  it('resolves a building code query whose external search matches only the canonical name', async () => {
+    const deps = gateways([destination()]);
+    const externalSearch = vi
+      .fn()
+      .mockImplementation((query: string) =>
+        Promise.resolve(
+          query === 'College of Business'
+            ? [
+                {
+                  id: 'mapbox.cob',
+                  name: 'College of Business',
+                  description: 'CSULB, Long Beach, California',
+                  latitude: 33.7873,
+                  longitude: -118.1136,
+                },
+              ]
+            : [],
+        ),
+      );
+    deps.externalPlaces.searchExternalPlaces = externalSearch;
+
+    const result = await createCampusService(deps).autocomplete('COB', 10);
+
+    expect(result.results).toMatchObject([
+      {
+        id: '00000000-0000-4000-8000-000000000001',
+        buildingCode: 'COB',
+        navigation: {
+          outdoorDestination: { latitude: 33.7873, longitude: -118.1136 },
+        },
+      },
+    ]);
+  });
+
+  it('rejects external coordinates whose name does not match the canonical record', async () => {
+    const deps = gateways([destination()]);
+    deps.externalPlaces.searchExternalPlaces = vi
+      .fn()
+      .mockImplementation((query: string) =>
+        Promise.resolve(
+          query === 'College of Business'
+            ? [
+                {
+                  id: 'mapbox.burrito',
+                  name: 'Beach Burrito',
+                  description: 'Long Beach, California',
+                  latitude: 33.7873,
+                  longitude: -118.1136,
+                },
+              ]
+            : [],
+        ),
+      );
+
+    const result = await createCampusService(deps).autocomplete('COB', 10);
+
+    expect(result.results).toEqual([
+      {
+        id: '00000000-0000-4000-8000-000000000001',
+        type: 'building',
+        title: 'College of Business',
+        subtitle: 'COB',
+        source: 'csulb_building_names_codes',
+        buildingCode: 'COB',
+      },
+    ]);
+  });
+
+  it('never derives coordinates for room records', async () => {
+    const room = destination({
+      id: '00000000-0000-4000-8000-000000000030',
+      type: 'room',
+      name: 'College of Business 140',
+      code: null,
+      aliases: [],
+      buildingCode: 'COB',
+      roomNumber: '140',
+    });
+    const deps = gateways([room]);
+    const externalSearch = vi.fn().mockResolvedValue([]);
+    deps.externalPlaces.searchExternalPlaces = externalSearch;
+
+    await createCampusService(deps).autocomplete('business 140 room', 10);
+
+    expect(externalSearch).not.toHaveBeenCalledWith('College of Business 140', 5);
+  });
+
+  it('caches derived coordinates per destination across requests', async () => {
+    const deps = gateways([destination()]);
+    const externalSearch = vi.fn().mockResolvedValue([
+      {
+        id: 'mapbox.cob',
+        name: 'College of Business',
+        description: 'CSULB, Long Beach, California',
+        latitude: 33.7873,
+        longitude: -118.1136,
+      },
+    ]);
+    deps.externalPlaces.searchExternalPlaces = externalSearch;
+    const service = createCampusService(deps);
+
+    await service.autocomplete('COB', 10);
+    await service.autocomplete('COB', 10);
+
+    expect(externalSearch).toHaveBeenCalledTimes(1);
+  });
+
+  it('derives outdoor coordinates for a place lookup that has none', async () => {
+    const cob = destination();
+    const deps = gateways([]);
+    deps.campusPlaces.findPlaceById = vi.fn().mockResolvedValue(cob);
+    deps.externalPlaces.searchExternalPlaces = vi.fn().mockResolvedValue([
+      {
+        id: 'mapbox.cob',
+        name: 'College of Business',
+        description: 'CSULB, Long Beach, California',
+        latitude: 33.7873,
+        longitude: -118.1136,
+        attribution: '© Mapbox and its suppliers',
+      },
+    ]);
+
+    const place = await createCampusService(deps).findPlace(cob.id);
+
+    expect(place).toMatchObject({
+      id: cob.id,
+      attribution: '© Mapbox and its suppliers',
+      navigation: {
+        outdoorDestination: { latitude: 33.7873, longitude: -118.1136 },
+      },
+    });
+  });
+
+  it('keeps verified coordinates instead of calling the external gateway on lookup', async () => {
+    const verified = destination({ latitude: 33.7832, longitude: -118.1147 });
+    const deps = gateways([]);
+    deps.campusPlaces.findPlaceById = vi.fn().mockResolvedValue(verified);
+    const externalSearch = vi.fn().mockResolvedValue([]);
+    deps.externalPlaces.searchExternalPlaces = externalSearch;
+
+    const place = await createCampusService(deps).findPlace(verified.id);
+
+    expect(externalSearch).not.toHaveBeenCalled();
+    expect(place).toMatchObject({
+      navigation: {
+        outdoorDestination: { latitude: 33.7832, longitude: -118.1147 },
+      },
+    });
   });
 
   it('filters proximity candidates by verified category before ordering by distance', async () => {
