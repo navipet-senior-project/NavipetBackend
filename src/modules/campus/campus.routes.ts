@@ -47,6 +47,7 @@ const campusRoutes: FastifyPluginCallbackTypebox = (fastify, _options, done) => 
   fastify.get(
     '/autocomplete',
     {
+      preHandler: fastify.authenticate,
       schema: AutocompleteRouteSchema,
       childLoggerFactory(logger, bindings, options, request) {
         return logger.child(bindings, {
@@ -94,7 +95,7 @@ const campusRoutes: FastifyPluginCallbackTypebox = (fastify, _options, done) => 
 
   fastify.get(
     '/places/:placeId',
-    { schema: PlaceRouteSchema },
+    { preHandler: fastify.authenticate, schema: PlaceRouteSchema },
     async (request) => {
       let place;
       try {
@@ -120,7 +121,7 @@ const campusRoutes: FastifyPluginCallbackTypebox = (fastify, _options, done) => 
 
   fastify.get(
     '/buildings/:buildingCode/rooms',
-    { schema: RoomsRouteSchema },
+    { preHandler: fastify.authenticate, schema: RoomsRouteSchema },
     async (request) => {
       requireMeaningfulQuery(request.query.q);
       let result;
