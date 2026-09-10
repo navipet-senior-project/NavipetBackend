@@ -115,7 +115,9 @@ export const PlaceResponseSchema = Type.Object(
 export const PlaceRouteSchema = {
   tags: ['Campus'],
   summary: 'Get one campus destination',
-  description: 'Requires a Supabase access token as a bearer credential.',
+  description:
+    'Resolves a single active, searchable destination by its campus place UUID — the `id` returned by GET /autocomplete for local results. Temporary Mapbox results from autocomplete are not stored and carry a `mapbox:` prefixed `id`, so passing one fails UUID validation with 422 rather than 404; use the coordinates already present on that result instead. A 404 means the UUID is well-formed but no matching active, searchable destination exists.\n\n' +
+    'Requires a Supabase access token as a bearer credential.',
   security: [{ bearerAuth: [] }],
   params: PlaceParamsSchema,
   response: {
@@ -148,7 +150,9 @@ const RoomsResponseSchema = Type.Object(
 export const RoomsRouteSchema = {
   tags: ['Campus'],
   summary: 'Search verified rooms in a building',
-  description: 'Requires a Supabase access token as a bearer credential.',
+  description:
+    'Lists rooms inside one building, ranked by how closely they match `q`. `buildingCode` is the campus building code (for example `ECS`) and is matched case-insensitively — it is the `buildingCode` field on autocomplete results. `q` must contain at least two meaningful characters; whitespace inside it is ignored, so "101" and "1 01" match the same rooms. `limit` defaults to 10 and is capped at 20. Only active, searchable room records are returned — buildings, entrances, and other destination types never appear here. A 404 means the building code does not resolve to an active, searchable building.\n\n' +
+    'Requires a Supabase access token as a bearer credential.',
   security: [{ bearerAuth: [] }],
   params: RoomsParamsSchema,
   querystring: SearchQuerySchema,
