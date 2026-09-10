@@ -7,6 +7,7 @@ import type {
   CampusDestinationRecord,
   ExternalPlacesGateway,
 } from '../../src/modules/campus/campus.types.js';
+import type { JwtVerifier } from '../../src/plugins/auth.js';
 import {
   createSupabaseResources,
   type SupabaseResources,
@@ -99,6 +100,17 @@ function resources(
   };
 }
 
+const authorization = { authorization: 'Bearer valid-access-token' };
+
+function verifier(): JwtVerifier {
+  return {
+    verify: vi.fn().mockResolvedValue({
+      id: '11111111-1111-4111-8111-111111111111',
+      sessionPurpose: 'standard',
+    }),
+  };
+}
+
 function noExternal(): ExternalPlacesGateway {
   return { searchExternalPlaces: vi.fn().mockResolvedValue([]) };
 }
@@ -135,10 +147,11 @@ describe('campus routes', () => {
         .fn()
         .mockResolvedValue(searchable.filter((record) => record.name === title)),
     });
-    app = await buildTestApp({}, { supabaseResources: local, externalPlaces: noExternal() });
+    app = await buildTestApp({}, { authVerifier: verifier(), supabaseResources: local, externalPlaces: noExternal() });
 
     const response = await app.inject({
       method: 'GET',
+      headers: authorization,
       url: `/autocomplete?q=${encodeURIComponent(query)}`,
     });
 
@@ -154,6 +167,7 @@ describe('campus routes', () => {
     app = await buildTestApp(
       {},
       {
+        authVerifier: verifier(),
         supabaseResources: resources({
           searchDestinations: vi.fn().mockResolvedValue([housing]),
         }),
@@ -163,6 +177,7 @@ describe('campus routes', () => {
 
     const response = await app.inject({
       method: 'GET',
+      headers: authorization,
       url: '/autocomplete?q=Parkside%20North',
     });
 
@@ -175,10 +190,11 @@ describe('campus routes', () => {
   it.each(['COB 140', 'COB-140', 'COB140', 'College of Business 140', 'room 140 COB'])(
     'returns a building alternative for nonexistent room query %s',
     async (query) => {
-      app = await buildTestApp({}, { supabaseResources: resources(), externalPlaces: noExternal() });
+      app = await buildTestApp({}, { authVerifier: verifier(), supabaseResources: resources(), externalPlaces: noExternal() });
 
       const response = await app.inject({
         method: 'GET',
+        headers: authorization,
         url: `/autocomplete?q=${encodeURIComponent(query)}`,
       });
 
@@ -198,9 +214,9 @@ describe('campus routes', () => {
   );
 
   it('returns an empty list for no local or external result', async () => {
-    app = await buildTestApp({}, { supabaseResources: resources({ searchDestinations: vi.fn().mockResolvedValue([]) }), externalPlaces: noExternal() });
+    app = await buildTestApp({}, { authVerifier: verifier(), supabaseResources: resources({ searchDestinations: vi.fn().mockResolvedValue([]) }), externalPlaces: noExternal() });
 
-    const response = await app.inject({ method: 'GET', url: '/autocomplete?q=zzzzzz' });
+    const response = await app.inject({ method: 'GET', headers: authorization, url: '/autocomplete?q=zzzzzz' });
 
     expect(response.statusCode).toBe(200);
     expect(response.json()).toEqual({ query: 'zzzzzz', results: [] });
@@ -209,16 +225,16 @@ describe('campus routes', () => {
   it.each(['/autocomplete', '/autocomplete?q=', '/autocomplete?q=x', '/autocomplete?q=---'])(
     'rejects an empty or one-character query: %s',
     async (url) => {
-      app = await buildTestApp({}, { supabaseResources: resources(), externalPlaces: noExternal() });
-      const response = await app.inject({ method: 'GET', url });
+      app = await buildTestApp({}, { authVerifier: verifier(), supabaseResources: resources(), externalPlaces: noExternal() });
+      const response = await app.inject({ method: 'GET', headers: authorization, url });
       expect(response.statusCode).toBe(422);
       expect(response.json()).toMatchObject({ error: { code: 'VALIDATION_ERROR' } });
     },
   );
 
   it('rejects an excessive limit', async () => {
-    app = await buildTestApp({}, { supabaseResources: resources(), externalPlaces: noExternal() });
-    const response = await app.inject({ method: 'GET', url: '/autocomplete?q=COB&limit=21' });
+    app = await buildTestApp({}, { authVerifier: verifier(), supabaseResources: resources(), externalPlaces: noExternal() });
+    const response = await app.inject({ method: 'GET', headers: authorization, url: '/autocomplete?q=COB&limit=21' });
     expect(response.statusCode).toBe(422);
   });
 
@@ -227,21 +243,21 @@ describe('campus routes', () => {
       destination({ active: false, name: 'Inactive Hall', code: 'INACTIVE' }),
       destination({ searchable: false, name: 'Hidden Hall', code: 'HIDDEN' }),
     ];
-    app = await buildTestApp({}, {
+    app = await buildTestApp({}, { authVerifier: verifier(),
       supabaseResources: resources({ searchDestinations: vi.fn().mockResolvedValue(hidden) }),
       externalPlaces: noExternal(),
     });
 
-    const response = await app.inject({ method: 'GET', url: '/autocomplete?q=hall' });
+    const response = await app.inject({ method: 'GET', headers: authorization, url: '/autocomplete?q=hall' });
 
     expect(response.statusCode).toBe(200);
     expect(response.json()).toEqual({ query: 'hall', results: [] });
   });
 
   it('returns one active searchable place without internal database fields', async () => {
-    app = await buildTestApp({}, { supabaseResources: resources(), externalPlaces: noExternal() });
+    app = await buildTestApp({}, { authVerifier: verifier(), supabaseResources: resources(), externalPlaces: noExternal() });
 
-    const response = await app.inject({ method: 'GET', url: `/places/${ids.cob}` });
+    const response = await app.inject({ method: 'GET', headers: authorization, url: `/places/${ids.cob}` });
 
     expect(response.statusCode).toBe(200);
     expect(response.json()).toEqual({
@@ -257,8 +273,8 @@ describe('campus routes', () => {
   });
 
   it('returns 404 for an unknown place', async () => {
-    app = await buildTestApp({}, { supabaseResources: resources(), externalPlaces: noExternal() });
-    const response = await app.inject({ method: 'GET', url: '/places/00000000-0000-4000-8000-000000000099' });
+    app = await buildTestApp({}, { authVerifier: verifier(), supabaseResources: resources(), externalPlaces: noExternal() });
+    const response = await app.inject({ method: 'GET', headers: authorization, url: '/places/00000000-0000-4000-8000-000000000099' });
     expect(response.statusCode).toBe(404);
     expect(response.json()).toMatchObject({ error: { code: 'NOT_FOUND' } });
   });
@@ -275,12 +291,12 @@ describe('campus routes', () => {
       roomNumber: '140',
       floorNumber: '1',
     });
-    app = await buildTestApp({}, {
+    app = await buildTestApp({}, { authVerifier: verifier(),
       supabaseResources: resources({ searchBuildingRooms: vi.fn().mockResolvedValue([room]) }),
       externalPlaces: noExternal(),
     });
 
-    const response = await app.inject({ method: 'GET', url: '/buildings/cob/rooms?q=140' });
+    const response = await app.inject({ method: 'GET', headers: authorization, url: '/buildings/cob/rooms?q=140' });
 
     expect(response.statusCode).toBe(200);
     expect(response.json()).toEqual({
@@ -309,12 +325,12 @@ describe('campus routes', () => {
         longitude: -118.115,
       }]),
     };
-    app = await buildTestApp({}, {
+    app = await buildTestApp({}, { authVerifier: verifier(),
       supabaseResources: resources({ searchDestinations: vi.fn().mockResolvedValue([]) }),
       externalPlaces,
     });
 
-    const response = await app.inject({ method: 'GET', url: '/autocomplete?q=1250%20Bellflower' });
+    const response = await app.inject({ method: 'GET', headers: authorization, url: '/autocomplete?q=1250%20Bellflower' });
 
     expect(response.statusCode).toBe(200);
     expect(response.json()).toMatchObject({
@@ -332,27 +348,28 @@ describe('campus routes', () => {
       parentDestinationId: ids.cob,
       metadata: { categories: ['elevator'] },
     });
-    app = await buildTestApp({}, {
+    app = await buildTestApp({}, { authVerifier: verifier(),
       supabaseResources: resources({
         searchBuildingChildren: vi.fn().mockResolvedValue([elevator]),
       }),
       externalPlaces: noExternal(),
     });
 
-    const response = await app.inject({ method: 'GET', url: '/autocomplete?q=elevator%20in%20COB' });
+    const response = await app.inject({ method: 'GET', headers: authorization, url: '/autocomplete?q=elevator%20in%20COB' });
 
     expect(response.statusCode).toBe(200);
     expect(response.json()).toMatchObject({ results: [{ id: elevator.id, title: 'COB Elevator' }] });
   });
 
   it('returns a structured error when proximity intent lacks user location', async () => {
-    app = await buildTestApp({}, {
+    app = await buildTestApp({}, { authVerifier: verifier(),
       supabaseResources: resources(),
       externalPlaces: noExternal(),
     });
 
     const response = await app.inject({
       method: 'GET',
+      headers: authorization,
       url: '/autocomplete?q=nearest%20restroom',
     });
 
@@ -371,12 +388,12 @@ describe('campus routes', () => {
     '/autocomplete?q=nearest%20parking&latitude=33.7838&longitude=-181',
     '/autocomplete?q=nearest%20parking&latitude=33.7838',
   ])('rejects invalid or incomplete coordinates: %s', async (url) => {
-    app = await buildTestApp({}, {
+    app = await buildTestApp({}, { authVerifier: verifier(),
       supabaseResources: resources(),
       externalPlaces: noExternal(),
     });
 
-    const response = await app.inject({ method: 'GET', url });
+    const response = await app.inject({ method: 'GET', headers: authorization, url });
 
     expect(response.statusCode).toBe(422);
     expect(response.json()).toMatchObject({ error: { code: 'VALIDATION_ERROR' } });
@@ -403,7 +420,7 @@ describe('campus routes', () => {
       longitude: -118.1141,
       metadata: { categories: ['parking_lot'] },
     });
-    app = await buildTestApp({}, {
+    app = await buildTestApp({}, { authVerifier: verifier(),
       supabaseResources: resources({
         listProximityDestinations: vi.fn().mockResolvedValue([far, near]),
       }),
@@ -412,6 +429,7 @@ describe('campus routes', () => {
 
     const response = await app.inject({
       method: 'GET',
+      headers: authorization,
       url: '/autocomplete?q=nearest%20parking&latitude=33.7838&longitude=-118.1141&limit=10',
     });
 
@@ -428,7 +446,7 @@ describe('campus routes', () => {
 
   it('returns no nearby results without calling Mapbox', async () => {
     const external = { searchExternalPlaces: vi.fn().mockResolvedValue([]) };
-    app = await buildTestApp({}, {
+    app = await buildTestApp({}, { authVerifier: verifier(),
       supabaseResources: resources({
         listProximityDestinations: vi.fn().mockResolvedValue([]),
       }),
@@ -437,6 +455,7 @@ describe('campus routes', () => {
 
     const response = await app.inject({
       method: 'GET',
+      headers: authorization,
       url: '/autocomplete?q=coffee%20near%20me&latitude=33.7838&longitude=-118.1141',
     });
 
@@ -458,6 +477,7 @@ describe('campus routes', () => {
     });
     app = await buildApp({
       env: TEST_ENV,
+      authVerifier: verifier(),
       logger: { level: 'info', stream },
       supabaseResources: resources(),
       externalPlaces: noExternal(),
@@ -465,15 +485,69 @@ describe('campus routes', () => {
 
     await app.inject({
       method: 'GET',
+      headers: authorization,
       url: '/autocomplete?q=nearest%20parking&latitude=33.7838&longitude=-118.1141',
     });
     await app.inject({
       method: 'GET',
+      headers: authorization,
       url: '/autocomplete?q=nearest%20parking&lat%69tude=33.7838&long%69tude=-118.1141',
     });
 
     expect(output).not.toContain('33.7838');
     expect(output).not.toContain('-118.1141');
     expect(output).toContain('[REDACTED]');
+  });
+
+  const protectedUrls = [
+    '/autocomplete?q=COB',
+    `/places/${ids.cob}`,
+    '/buildings/cob/rooms?q=140',
+  ];
+
+  it.each(protectedUrls)('rejects %s without a bearer token', async (url) => {
+    app = await buildTestApp({}, {
+      authVerifier: verifier(),
+      supabaseResources: resources(),
+      externalPlaces: noExternal(),
+    });
+
+    const response = await app.inject({ method: 'GET', url });
+
+    expect(response.statusCode).toBe(401);
+    expect(response.json()).toMatchObject({
+      error: { code: 'INVALID_ACCESS_TOKEN' },
+    });
+  });
+
+  it.each(protectedUrls)('rejects %s with a recovery-purpose token', async (url) => {
+    const recovery: JwtVerifier = {
+      verify: vi.fn().mockResolvedValue({
+        id: '11111111-1111-4111-8111-111111111111',
+        sessionPurpose: 'recovery',
+      }),
+    };
+    app = await buildTestApp({}, {
+      authVerifier: recovery,
+      supabaseResources: resources(),
+      externalPlaces: noExternal(),
+    });
+
+    const response = await app.inject({ method: 'GET', headers: authorization, url });
+
+    expect(response.statusCode).toBe(401);
+  });
+
+  it('never reaches the campus service without a token', async () => {
+    const searchDestinations = vi.fn().mockResolvedValue([]);
+    app = await buildTestApp({}, {
+      authVerifier: verifier(),
+      supabaseResources: resources({ searchDestinations }),
+      externalPlaces: noExternal(),
+    });
+
+    await app.inject({ method: 'GET', url: '/autocomplete?q=COB' });
+
+    expect(searchDestinations).not.toHaveBeenCalled();
   });
 });
