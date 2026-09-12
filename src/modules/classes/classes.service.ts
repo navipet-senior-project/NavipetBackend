@@ -1,7 +1,8 @@
 import type { SupabaseResources } from '../../plugins/supabase.js';
 import { AppError } from '../../common/errors/app-error.js';
 import { ErrorCode } from '../../common/errors/error-codes.js';
-import type { CampusDestinationRecord } from '../campus/campus.types.js';
+import type { CampusDestinationRecord, ExternalPlacesGateway } from '../campus/campus.types.js';
+import { createOutdoorFallbackResolver } from '../campus/outdoor-fallback.js';
 import type { ClassRecord, CreateClassInput, UpdateClassInput } from './classes.types.js';
 
 function coordinatePair(building: CampusDestinationRecord): { latitude: number; longitude: number } | null {
@@ -12,34 +13,54 @@ function coordinatePair(building: CampusDestinationRecord): { latitude: number; 
     : null;
 }
 
-async function resolveBuilding(gateway: SupabaseResources, buildingInput: string): Promise<{ name: string; coordinates: { latitude: number; longitude: number } }> {
-  const query = buildingInput.trim();
+async function resolveCsulbBuilding(
+  gateway: SupabaseResources,
+  query: string,
+): Promise<CampusDestinationRecord | undefined> {
   const codeBuilding = await gateway.findBuildingByCode(query.toLocaleUpperCase('en-US'));
   const results = codeBuilding === null ? await gateway.searchDestinations(query, 20) : [];
   const buildings = codeBuilding === null
     ? results.filter((result) => result.type === 'building')
     : [codeBuilding];
   const normalized = query.toLocaleLowerCase('en-US');
-  const building = buildings.find((result) =>
+  return buildings.find((result) =>
     result.name.toLocaleLowerCase('en-US') === normalized ||
     result.code?.toLocaleLowerCase('en-US') === normalized ||
     result.buildingCode?.toLocaleLowerCase('en-US') === normalized,
   ) ?? (buildings.length === 1 ? buildings[0] : undefined);
-  if (building === undefined) {
-    throw new AppError({ code: ErrorCode.NOT_FOUND, statusCode: 404, message: 'CSULB building not found.' });
-  }
-  const coordinates = coordinatePair(building);
-  if (coordinates === null) {
-    throw new AppError({ code: ErrorCode.UPSTREAM_ERROR, statusCode: 502, message: 'CSULB building has no coordinates.' });
-  }
-  return { name: building.name, coordinates };
 }
 
-export function createClassesService(gateway: SupabaseResources) {
+async function resolveBuilding(
+  gateway: SupabaseResources,
+  externalPlaces: ExternalPlacesGateway,
+  buildingInput: string,
+): Promise<{ name: string; coordinates: { latitude: number; longitude: number } }> {
+  const query = buildingInput.trim();
+  const building = await resolveCsulbBuilding(gateway, query);
+  if (building !== undefined) {
+    const outdoorFallback = createOutdoorFallbackResolver(externalPlaces);
+    const coordinates = coordinatePair(building) ?? (await outdoorFallback.resolve(building));
+    if (coordinates === null) {
+      throw new AppError({ code: ErrorCode.UPSTREAM_ERROR, statusCode: 502, message: 'CSULB building has no coordinates.' });
+    }
+    return { name: building.name, coordinates };
+  }
+
+  // Not a known CSULB building: the client may have supplied a plain address
+  // (e.g. an internship site or another campus), so fall back to Mapbox
+  // forward geocoding the same way the recent-searches/campus autocomplete does.
+  const [external] = await externalPlaces.searchExternalPlaces(query, 1);
+  if (external === undefined) {
+    throw new AppError({ code: ErrorCode.NOT_FOUND, statusCode: 404, message: 'Building or address not found.' });
+  }
+  return { name: external.name, coordinates: { latitude: external.latitude, longitude: external.longitude } };
+}
+
+export function createClassesService(gateway: SupabaseResources, externalPlaces: ExternalPlacesGateway) {
   return {
     list: (accessToken: string) => gateway.listClasses(accessToken),
     create: async (accessToken: string, userId: string, input: CreateClassInput) => {
-      const building = await resolveBuilding(gateway, input.building);
+      const building = await resolveBuilding(gateway, externalPlaces, input.building);
       return gateway.createClass(accessToken, userId, {
         ...input,
         building: building.name,
@@ -49,7 +70,7 @@ export function createClassesService(gateway: SupabaseResources) {
     },
     update: async (accessToken: string, classId: string, input: UpdateClassInput) => {
       if (input.building === undefined) return gateway.updateClass(accessToken, classId, input);
-      const building = await resolveBuilding(gateway, input.building);
+      const building = await resolveBuilding(gateway, externalPlaces, input.building);
       return gateway.updateClass(accessToken, classId, {
         ...input,
         building: building.name,

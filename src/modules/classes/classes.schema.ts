@@ -40,14 +40,14 @@ export const ListClassesRouteSchema = {
 export const CreateClassRouteSchema = {
   tags: ['Classes'], summary: 'Add a class to the authenticated user schedule', security: [{ bearerAuth: [] }],
   body: Type.Object(ClassFieldsSchema, { additionalProperties: false }),
-  response: { 201: Type.Object({ class: ClassResponseSchema }), 404: ErrorResponseSchema('CSULB building not found.'), ...commonErrors },
+  response: { 201: Type.Object({ class: ClassResponseSchema }), 404: ErrorResponseSchema('Building or address not found.'), ...commonErrors },
 };
 
 export const UpdateClassRouteSchema = {
   tags: ['Classes'], summary: 'Update one authenticated user class', security: [{ bearerAuth: [] }],
   params: ClassIdParamsSchema,
   body: Type.Partial(Type.Object(ClassFieldsSchema, { additionalProperties: false })),
-  response: { 200: Type.Object({ class: ClassResponseSchema }), 404: ErrorResponseSchema('Class or CSULB building not found.'), ...commonErrors },
+  response: { 200: Type.Object({ class: ClassResponseSchema }), 404: ErrorResponseSchema('Class not found, or building/address not found.'), ...commonErrors },
 };
 
 export const DeleteClassRouteSchema = {

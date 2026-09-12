@@ -13,7 +13,7 @@ async function storageOperation<T>(operation: () => Promise<T>): Promise<T> {
 }
 
 const classesRoutes: FastifyPluginCallbackTypebox = (fastify, _options, done) => {
-  const service = createClassesService(fastify.supabase);
+  const service = createClassesService(fastify.supabase, fastify.externalPlaces);
 
   fastify.get('/classes', { preHandler: fastify.authenticate, schema: ListClassesRouteSchema }, async (request) => ({
     classes: await storageOperation(() => service.list(request.accessToken as string)),
