@@ -7,21 +7,44 @@ const UuidSchema = Type.String({
 });
 
 const ClassFieldsSchema = {
-  courseCode: Type.String({ minLength: 1, maxLength: 30 }),
-  courseName: Type.String({ minLength: 1, maxLength: 100 }),
-  building: Type.String({ minLength: 1, maxLength: 100 }),
-  room: Type.Optional(Type.String({ maxLength: 100 })),
-  weekdays: Type.Array(Type.Integer({ minimum: 1, maximum: 7 }), { maxItems: 7 }),
-  startTime: Type.String({ pattern: '^([01][0-9]|2[0-3]):[0-5][0-9](:[0-5][0-9])?$' }),
+  courseCode: Type.String({ minLength: 1, maxLength: 30, example: 'CECS 491A' }),
+  courseName: Type.String({ minLength: 1, maxLength: 100, example: 'Software Engineering Project' }),
+  building: Type.String({
+    minLength: 1,
+    maxLength: 100,
+    example: 'VEC',
+    description:
+      'A CSULB building name or code (e.g. "VEC" or "Vivian Engineering Center") is resolved against the ' +
+      'campus dataset. Anything else (a street address, another campus, an off-campus site) is forward-geocoded ' +
+      'with Mapbox instead. Either way the response echoes back a resolved display name plus latitude/longitude.',
+  }),
+  room: Type.Optional(Type.String({ maxLength: 100, example: '3-3' })),
+  weekdays: Type.Array(Type.Integer({ minimum: 1, maximum: 7 }), {
+    maxItems: 7,
+    example: [1, 3, 5],
+    description: 'ISO weekdays the class meets: 1 = Monday ... 7 = Sunday.',
+  }),
+  startTime: Type.String({
+    pattern: '^([01][0-9]|2[0-3]):[0-5][0-9](:[0-5][0-9])?$',
+    example: '11:00',
+    description: '24-hour local time, "HH:MM" or "HH:MM:SS".',
+  }),
 };
 
-const ClassResponseSchema = Type.Object({
-  id: UuidSchema,
-  ...ClassFieldsSchema,
-  room: Type.String(),
-  createdAt: Type.String(),
-  updatedAt: Type.String(),
-}, { additionalProperties: false });
+const ClassResponseSchema = Type.Object(
+  {
+    id: UuidSchema,
+    ...ClassFieldsSchema,
+    room: Type.String(),
+    createdAt: Type.String(),
+    updatedAt: Type.String(),
+  },
+  {
+    $id: 'ClassResponse',
+    additionalProperties: false,
+    description: 'The stored class, with `building` resolved to its canonical display name.',
+  },
+);
 
 const ClassIdParamsSchema = Type.Object({ classId: UuidSchema }, { additionalProperties: false });
 
@@ -34,20 +57,55 @@ const commonErrors = {
 
 export const ListClassesRouteSchema = {
   tags: ['Classes'], summary: 'List the authenticated user classes', security: [{ bearerAuth: [] }],
-  response: { 200: Type.Object({ classes: Type.Array(ClassResponseSchema) }), ...commonErrors },
+  description:
+    'Requires a bearer access token from `POST /auth/login`.\n\n' +
+    'Use the `access_token` field from that response. The Swagger "Authorize" button above sends it as ' +
+    'the Authorization header for every request on this page.\n\n' +
+    'Returns every class on the authenticated user schedule, most-recently-created last.',
+  response: {
+    200: Type.Object(
+      { classes: Type.Array(ClassResponseSchema) },
+      { description: "The authenticated user's classes." },
+    ),
+    ...commonErrors,
+  },
 };
 
 export const CreateClassRouteSchema = {
   tags: ['Classes'], summary: 'Add a class to the authenticated user schedule', security: [{ bearerAuth: [] }],
+  description:
+    'Adds one class. Use the example request body below as a starting point — it already resolves.\n\n' +
+    '`building` accepts either a CSULB building name or code (resolved against the campus dataset) or a plain ' +
+    'address (forward-geocoded with Mapbox). Either way the stored class gets a resolved display name plus ' +
+    'latitude/longitude, used later for class-aware navigation.\n\n' +
+    '`weekdays` and `startTime` are validated but not otherwise interpreted server-side.',
   body: Type.Object(ClassFieldsSchema, { additionalProperties: false }),
-  response: { 201: Type.Object({ class: ClassResponseSchema }), 404: ErrorResponseSchema('Building or address not found.'), ...commonErrors },
+  response: {
+    201: Type.Object(
+      { class: ClassResponseSchema },
+      { description: 'The class was created.' },
+    ),
+    404: ErrorResponseSchema('Building or address not found.'),
+    ...commonErrors,
+  },
 };
 
 export const UpdateClassRouteSchema = {
   tags: ['Classes'], summary: 'Update one authenticated user class', security: [{ bearerAuth: [] }],
+  description:
+    'Partial update: send only the fields being changed. An empty body returns 422.\n\n' +
+    'Omitting `building` leaves the stored coordinates untouched.\n\n' +
+    'Sending `building` re-resolves the coordinates the same way `POST /classes` does.',
   params: ClassIdParamsSchema,
   body: Type.Partial(Type.Object(ClassFieldsSchema, { additionalProperties: false })),
-  response: { 200: Type.Object({ class: ClassResponseSchema }), 404: ErrorResponseSchema('Class not found, or building/address not found.'), ...commonErrors },
+  response: {
+    200: Type.Object(
+      { class: ClassResponseSchema },
+      { description: 'The class was updated.' },
+    ),
+    404: ErrorResponseSchema('Class not found, or building/address not found.'),
+    ...commonErrors,
+  },
 };
 
 export const DeleteClassRouteSchema = {
