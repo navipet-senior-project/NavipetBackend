@@ -10,11 +10,13 @@ export interface AppErrorOptions {
 export class AppError extends Error {
   readonly code: ErrorCode;
   readonly statusCode: number;
+  readonly originalCause: unknown;
 
   constructor(options: AppErrorOptions) {
     super(options.message, { cause: options.cause });
     this.name = 'AppError';
     this.code = options.code;
     this.statusCode = options.statusCode;
+    this.originalCause = options.cause;
   }
 }

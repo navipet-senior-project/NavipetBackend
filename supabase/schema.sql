@@ -87,6 +87,9 @@ create table if not exists public.classes (
 
 create index if not exists classes_user_id_idx on public.classes(user_id);
 alter table public.classes enable row level security;
+revoke all on table public.classes from anon;
+grant select, insert, update, delete on table public.classes to authenticated;
+grant select, insert, update, delete on table public.classes to service_role;
 
 drop policy if exists "Classes are readable by their owner" on public.classes;
 create policy "Classes are readable by their owner" on public.classes
