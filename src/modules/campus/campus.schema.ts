@@ -85,10 +85,13 @@ export const AutocompleteRouteSchema = {
   tags: ['Campus'],
   summary: 'Autocomplete campus destinations',
   description:
-    'Searches active, searchable CSULB destinations first. Proximity intents require latitude and longitude and never use external fallback. A temporary Mapbox result may be returned when ordinary local search has no routable outdoor destination.',
+    'Searches active, searchable CSULB destinations first. Proximity intents require latitude and longitude and never use external fallback. A temporary Mapbox result may be returned when ordinary local search has no routable outdoor destination.\n\n' +
+    'Requires a Supabase access token as a bearer credential.',
+  security: [{ bearerAuth: [] }],
   querystring: SearchQuerySchema,
   response: {
     200: AutocompleteResponseSchema,
+    401: ErrorResponseSchema('Access token is missing, invalid, or expired.'),
     422: ErrorResponseSchema('Query, limit, or location failed validation.'),
     429: ErrorResponseSchema('Too many requests.'),
     502: ErrorResponseSchema('A required search provider is unavailable.'),
@@ -112,9 +115,14 @@ export const PlaceResponseSchema = Type.Object(
 export const PlaceRouteSchema = {
   tags: ['Campus'],
   summary: 'Get one campus destination',
+  description:
+    'Resolves a single active, searchable destination by its campus place UUID — the `id` returned by GET /autocomplete for local results. Temporary Mapbox results from autocomplete are not stored and carry a `mapbox:` prefixed `id`, so passing one fails UUID validation with 422 rather than 404; use the coordinates already present on that result instead. A 404 means the UUID is well-formed but no matching active, searchable destination exists.\n\n' +
+    'Requires a Supabase access token as a bearer credential.',
+  security: [{ bearerAuth: [] }],
   params: PlaceParamsSchema,
   response: {
     200: PlaceResponseSchema,
+    401: ErrorResponseSchema('Access token is missing, invalid, or expired.'),
     404: ErrorResponseSchema('The active, searchable destination does not exist.'),
     422: ErrorResponseSchema('Place ID failed validation.'),
     429: ErrorResponseSchema('Too many requests.'),
@@ -142,10 +150,15 @@ const RoomsResponseSchema = Type.Object(
 export const RoomsRouteSchema = {
   tags: ['Campus'],
   summary: 'Search verified rooms in a building',
+  description:
+    'Lists rooms inside one building, ranked by how closely they match `q`. `buildingCode` is the campus building code (for example `ECS`) and is matched case-insensitively — it is the `buildingCode` field on autocomplete results. `q` must contain at least two meaningful characters; whitespace inside it is ignored, so "101" and "1 01" match the same rooms. `limit` defaults to 10 and is capped at 20. Only active, searchable room records are returned — buildings, entrances, and other destination types never appear here. A 404 means the building code does not resolve to an active, searchable building.\n\n' +
+    'Requires a Supabase access token as a bearer credential.',
+  security: [{ bearerAuth: [] }],
   params: RoomsParamsSchema,
   querystring: SearchQuerySchema,
   response: {
     200: RoomsResponseSchema,
+    401: ErrorResponseSchema('Access token is missing, invalid, or expired.'),
     404: ErrorResponseSchema('The active, searchable building does not exist.'),
     422: ErrorResponseSchema('Building code, room query, or limit failed validation.'),
     429: ErrorResponseSchema('Too many requests.'),
