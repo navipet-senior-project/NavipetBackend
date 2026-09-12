@@ -9,6 +9,8 @@
   "scripts": {
     "campus-places:apply": "tsx scripts/import-campus-places.ts --apply --approved",
     "campus-places:dry-run": "tsx scripts/import-campus-places.ts",
+    "campus-coordinates:apply": "tsx scripts/enrich-campus-coordinates.ts --apply --approved",
+    "campus-coordinates:dry-run": "tsx scripts/enrich-campus-coordinates.ts",
     "dev": "tsx watch src/server.ts",
     "test": "vitest run",
     "test:watch": "vitest",

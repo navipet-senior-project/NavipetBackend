@@ -79,6 +79,7 @@ create table if not exists public.classes (
   room text not null default '',
   weekdays smallint[] not null default '{}' check (weekdays <@ array[1,2,3,4,5,6,7]::smallint[]),
   start_time time not null default '09:00',
+  end_time time not null default '10:00' check (end_time > start_time),
   latitude double precision not null,
   longitude double precision not null,
   created_at timestamptz not null default now(),
@@ -87,6 +88,9 @@ create table if not exists public.classes (
 
 create index if not exists classes_user_id_idx on public.classes(user_id);
 alter table public.classes enable row level security;
+revoke all on table public.classes from anon;
+grant select, insert, update, delete on table public.classes to authenticated;
+grant select, insert, update, delete on table public.classes to service_role;
 
 drop policy if exists "Classes are readable by their owner" on public.classes;
 create policy "Classes are readable by their owner" on public.classes

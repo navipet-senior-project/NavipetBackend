@@ -16,6 +16,11 @@ import type {
   PublicCampusResult,
 } from '../modules/campus/campus.types.js';
 import { attachIndoorDestinationIds } from '../modules/campus/campus.service.js';
+import { mapClassRow } from '../modules/classes/classes.service.js';
+import type {
+  ClassRecord,
+  ClassesGateway,
+} from '../modules/classes/classes.types.js';
 
 const noSession = {
   auth: {
@@ -158,7 +163,8 @@ export interface SupabaseResources
     OtpVerificationGateway,
     PasswordUpdateGateway,
     CampusPlacesGateway,
-    RecentSearchGateway {
+    RecentSearchGateway,
+    ClassesGateway {
   publicClient: SupabaseClient;
   adminClient: SupabaseClient | null;
   forAccessToken(accessToken: string): SupabaseClient;
@@ -321,6 +327,65 @@ export function createSupabaseResources(config: Environment): SupabaseResources 
         .delete()
         .gte('searched_at', '0001-01-01T00:00:00.000Z');
       if (error !== null) throw error;
+    },
+    async listClasses(accessToken): Promise<ClassRecord[]> {
+      const { data, error } = await forAccessToken(accessToken)
+        .from('classes')
+        .select('id,course_code,course_name,building,room,weekdays,start_time,end_time,latitude,longitude,created_at,updated_at')
+        .order('created_at', { ascending: true });
+      if (error !== null) throw error;
+      return data.map(mapClassRow);
+    },
+    async createClass(accessToken, userId, input): Promise<ClassRecord> {
+      const { data, error } = await forAccessToken(accessToken)
+        .from('classes')
+        .insert({
+          user_id: userId,
+          course_code: input.courseCode,
+          course_name: input.courseName,
+          building: input.building,
+          room: input.room ?? '',
+          weekdays: input.weekdays,
+          start_time: input.startTime,
+          end_time: input.endTime,
+          latitude: input.latitude,
+          longitude: input.longitude,
+        })
+        .select('id,course_code,course_name,building,room,weekdays,start_time,end_time,latitude,longitude,created_at,updated_at')
+        .single();
+      if (error !== null) throw error;
+      return mapClassRow(data);
+    },
+    async updateClass(accessToken, classId, input): Promise<ClassRecord | null> {
+      const values: Record<string, unknown> = {};
+      if (input.courseCode !== undefined) values.course_code = input.courseCode;
+      if (input.courseName !== undefined) values.course_name = input.courseName;
+      if (input.building !== undefined) values.building = input.building;
+      if (input.room !== undefined) values.room = input.room;
+      if (input.weekdays !== undefined) values.weekdays = input.weekdays;
+      if (input.startTime !== undefined) values.start_time = input.startTime;
+      if (input.endTime !== undefined) values.end_time = input.endTime;
+      if (input.latitude !== undefined) values.latitude = input.latitude;
+      if (input.longitude !== undefined) values.longitude = input.longitude;
+      if (Object.keys(values).length === 0) return null;
+      const { data, error } = await forAccessToken(accessToken)
+        .from('classes')
+        .update(values)
+        .eq('id', classId)
+        .select('id,course_code,course_name,building,room,weekdays,start_time,end_time,latitude,longitude,created_at,updated_at')
+        .maybeSingle();
+      if (error !== null) throw error;
+      return data === null ? null : mapClassRow(data);
+    },
+    async deleteClass(accessToken, classId): Promise<boolean> {
+      const { data, error } = await forAccessToken(accessToken)
+        .from('classes')
+        .delete()
+        .eq('id', classId)
+        .select('id')
+        .maybeSingle();
+      if (error !== null) throw error;
+      return data !== null;
     },
     async searchDestinations(query, limit) {
       const response = (await publicClient.rpc(
