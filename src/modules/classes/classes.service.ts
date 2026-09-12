@@ -5,6 +5,21 @@ import type { CampusDestinationRecord, ExternalPlacesGateway } from '../campus/c
 import { createOutdoorFallbackResolver } from '../campus/outdoor-fallback.js';
 import type { ClassRecord, CreateClassInput, UpdateClassInput } from './classes.types.js';
 
+function withSeconds(time: string): string {
+  return time.length === 5 ? `${time}:00` : time;
+}
+
+function validateTimeOrder(startTime: string | undefined, endTime: string | undefined): void {
+  if (startTime === undefined || endTime === undefined) return;
+  if (withSeconds(endTime) <= withSeconds(startTime)) {
+    throw new AppError({
+      code: ErrorCode.VALIDATION_ERROR,
+      statusCode: 422,
+      message: 'End time must be later than start time.',
+    });
+  }
+}
+
 function coordinatePair(building: CampusDestinationRecord): { latitude: number; longitude: number } | null {
   const latitude = building.outdoorDestinationLatitude ?? building.latitude;
   const longitude = building.outdoorDestinationLongitude ?? building.longitude;
@@ -60,6 +75,7 @@ export function createClassesService(gateway: SupabaseResources, externalPlaces:
   return {
     list: (accessToken: string) => gateway.listClasses(accessToken),
     create: async (accessToken: string, userId: string, input: CreateClassInput) => {
+      validateTimeOrder(input.startTime, input.endTime);
       const building = await resolveBuilding(gateway, externalPlaces, input.building);
       return gateway.createClass(accessToken, userId, {
         ...input,
@@ -69,6 +85,7 @@ export function createClassesService(gateway: SupabaseResources, externalPlaces:
       });
     },
     update: async (accessToken: string, classId: string, input: UpdateClassInput) => {
+      validateTimeOrder(input.startTime, input.endTime);
       if (input.building === undefined) return gateway.updateClass(accessToken, classId, input);
       const building = await resolveBuilding(gateway, externalPlaces, input.building);
       return gateway.updateClass(accessToken, classId, {
@@ -91,6 +108,7 @@ export function mapClassRow(row: Record<string, unknown>): ClassRecord {
     room: row.room as string,
     weekdays: row.weekdays as number[],
     startTime: row.start_time as string,
+    endTime: row.end_time as string,
     latitude: row.latitude as number,
     longitude: row.longitude as number,
     createdAt: row.created_at as string,

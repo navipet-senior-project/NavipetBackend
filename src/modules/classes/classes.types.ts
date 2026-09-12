@@ -6,6 +6,7 @@ export interface ClassRecord {
   room: string;
   weekdays: number[];
   startTime: string;
+  endTime: string;
   latitude: number;
   longitude: number;
   createdAt: string;
@@ -19,6 +20,7 @@ export interface CreateClassInput {
   room?: string;
   weekdays: number[];
   startTime: string;
+  endTime: string;
   /** Resolved by the campus service; not accepted from the public API. */
   latitude?: number;
   /** Resolved by the campus service; not accepted from the public API. */

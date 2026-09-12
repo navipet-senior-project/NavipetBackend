@@ -57,6 +57,7 @@ function classRecord(overrides: Partial<ClassRecord> = {}): ClassRecord {
     room: '3-3',
     weekdays: [1, 3, 5],
     startTime: '11:00',
+    endTime: '12:15',
     latitude: 33.783,
     longitude: -118.112,
     createdAt: '2026-01-01T00:00:00.000Z',
@@ -100,6 +101,7 @@ const createBody = {
   room: '3-3',
   weekdays: [1, 3, 5],
   startTime: '11:00',
+  endTime: '12:15',
 };
 
 describe('classes routes', () => {
@@ -277,6 +279,26 @@ describe('classes routes', () => {
     expect(response.statusCode).toBe(502);
     expect(response.json()).toMatchObject({ error: { code: 'INTERNAL_ERROR' } });
   });
+
+  it.each(['11:00', '10:59'])(
+    'returns 422 when endTime (%s) is not later than startTime (11:00)',
+    async (endTime) => {
+      app = await buildTestApp(
+        {},
+        { supabaseResources: resources(), externalPlaces: noExternal(), authVerifier: verifiedVerifier() },
+      );
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/classes',
+        headers: { authorization: 'Bearer valid-access-token' },
+        payload: { ...createBody, startTime: '11:00', endTime },
+      });
+
+      expect(response.statusCode).toBe(422);
+      expect(response.json()).toMatchObject({ error: { code: 'VALIDATION_ERROR' } });
+    },
+  );
 
   it('updates a class without re-resolving the building when building is omitted', async () => {
     const updateClass = vi.fn().mockResolvedValue(classRecord({ room: '1-1' }));

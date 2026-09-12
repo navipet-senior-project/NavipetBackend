@@ -29,6 +29,11 @@ const ClassFieldsSchema = {
     example: '11:00',
     description: '24-hour local time, "HH:MM" or "HH:MM:SS".',
   }),
+  endTime: Type.String({
+    pattern: '^([01][0-9]|2[0-3]):[0-5][0-9](:[0-5][0-9])?$',
+    example: '12:15',
+    description: '24-hour local time, "HH:MM" or "HH:MM:SS". Must be later than `startTime`.',
+  }),
 };
 
 const ClassResponseSchema = Type.Object(
@@ -78,7 +83,8 @@ export const CreateClassRouteSchema = {
     '`building` accepts either a CSULB building name or code (resolved against the campus dataset) or a plain ' +
     'address (forward-geocoded with Mapbox). Either way the stored class gets a resolved display name plus ' +
     'latitude/longitude, used later for class-aware navigation.\n\n' +
-    '`weekdays` and `startTime` are validated but not otherwise interpreted server-side.',
+    '`weekdays`, `startTime`, and `endTime` are validated but not otherwise interpreted server-side.\n\n' +
+    'A request where the end time is not later than the start time returns 422.',
   body: Type.Object(ClassFieldsSchema, { additionalProperties: false }),
   response: {
     201: Type.Object(
@@ -95,7 +101,9 @@ export const UpdateClassRouteSchema = {
   description:
     'Partial update: send only the fields being changed. An empty body returns 422.\n\n' +
     'Omitting `building` leaves the stored coordinates untouched.\n\n' +
-    'Sending `building` re-resolves the coordinates the same way `POST /classes` does.',
+    'Sending `building` re-resolves the coordinates the same way `POST /classes` does.\n\n' +
+    'Sending both `startTime` and `endTime` together validates that the end time is later than the start time. ' +
+    'Changing only one of them is not cross-checked against the class\'s stored value for the other.',
   params: ClassIdParamsSchema,
   body: Type.Partial(Type.Object(ClassFieldsSchema, { additionalProperties: false })),
   response: {

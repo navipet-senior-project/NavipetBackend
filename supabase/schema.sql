@@ -79,6 +79,7 @@ create table if not exists public.classes (
   room text not null default '',
   weekdays smallint[] not null default '{}' check (weekdays <@ array[1,2,3,4,5,6,7]::smallint[]),
   start_time time not null default '09:00',
+  end_time time not null default '10:00' check (end_time > start_time),
   latitude double precision not null,
   longitude double precision not null,
   created_at timestamptz not null default now(),
