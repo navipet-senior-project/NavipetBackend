@@ -21,6 +21,7 @@ import type {
   ClassRecord,
   ClassesGateway,
 } from '../modules/classes/classes.types.js';
+import type { ProfileRecord } from '../modules/profiles/profiles.types.js';
 
 const noSession = {
   auth: {
@@ -139,6 +140,10 @@ export interface UserEmailLookupGateway {
   findUserIdByEmail(email: string): Promise<string | null>;
 }
 
+export interface ProfileGateway {
+  getProfileByUserId(accessToken: string): Promise<ProfileRecord | null>;
+}
+
 export interface RecentSearch {
   place: PublicCampusResult;
   searchedAt: string;
@@ -158,6 +163,7 @@ export interface SupabaseResources
     SessionRevocationGateway,
     UserLookupGateway,
     UserEmailLookupGateway,
+    ProfileGateway,
     PasswordResetRequestGateway,
     RecoveryIntentGateway,
     OtpVerificationGateway,
@@ -327,6 +333,19 @@ export function createSupabaseResources(config: Environment): SupabaseResources 
         .delete()
         .gte('searched_at', '0001-01-01T00:00:00.000Z');
       if (error !== null) throw error;
+    },
+    async getProfileByUserId(accessToken): Promise<ProfileRecord | null> {
+      const { data, error } = await forAccessToken(accessToken)
+        .from('profiles')
+        .select('display_name,email,role')
+        .maybeSingle();
+      if (error !== null) throw error;
+      if (data === null) return null;
+      return {
+        displayName: data.display_name as string,
+        email: data.email as string | null,
+        role: data.role as ProfileRecord['role'],
+      };
     },
     async listClasses(accessToken): Promise<ClassRecord[]> {
       const { data, error } = await forAccessToken(accessToken)

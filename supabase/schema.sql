@@ -5,6 +5,8 @@ create table if not exists public.profiles (
   id uuid primary key references auth.users(id) on delete cascade,
   display_name text not null default 'NaviPet Explorer'
     check (char_length(display_name) between 1 and 80),
+  email text,
+  role text check (role in ('student', 'professor')),
   avatar_color bigint not null default 4294946816,
   gems integer not null default 0 check (gems >= 0),
   level integer not null default 1 check (level >= 1),
@@ -31,7 +33,7 @@ language plpgsql
 security definer set search_path = ''
 as $$
 begin
-  insert into public.profiles (id, display_name)
+  insert into public.profiles (id, display_name, email)
   values (
     new.id,
     coalesce(
@@ -40,7 +42,8 @@ begin
         when new.is_anonymous then 'Guest Explorer'
         else split_part(coalesce(new.email, 'NaviPet Explorer'), '@', 1)
       end
-    )
+    ),
+    new.email
   )
   on conflict (id) do nothing;
   return new;
