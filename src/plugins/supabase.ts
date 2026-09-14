@@ -21,7 +21,10 @@ import type {
   ClassRecord,
   ClassesGateway,
 } from '../modules/classes/classes.types.js';
-import type { ProfileRecord } from '../modules/profiles/profiles.types.js';
+import type {
+  ProfileRecord,
+  UpdateProfileInput,
+} from '../modules/profiles/profiles.types.js';
 
 const noSession = {
   auth: {
@@ -142,6 +145,11 @@ export interface UserEmailLookupGateway {
 
 export interface ProfileGateway {
   getProfileByUserId(accessToken: string): Promise<ProfileRecord | null>;
+  updateProfile(
+    accessToken: string,
+    userId: string,
+    input: UpdateProfileInput,
+  ): Promise<ProfileRecord | null>;
 }
 
 export interface RecentSearch {
@@ -337,6 +345,26 @@ export function createSupabaseResources(config: Environment): SupabaseResources 
     async getProfileByUserId(accessToken): Promise<ProfileRecord | null> {
       const { data, error } = await forAccessToken(accessToken)
         .from('profiles')
+        .select('display_name,email,role')
+        .maybeSingle();
+      if (error !== null) throw error;
+      if (data === null) return null;
+      return {
+        displayName: data.display_name as string,
+        email: data.email as string | null,
+        role: data.role as ProfileRecord['role'],
+      };
+    },
+    async updateProfile(accessToken, userId, input): Promise<ProfileRecord | null> {
+      const values = {
+        ...(input.displayName === undefined ? {} : { display_name: input.displayName }),
+        ...(input.email === undefined ? {} : { email: input.email }),
+        ...(input.role === undefined ? {} : { role: input.role }),
+      };
+      const { data, error } = await forAccessToken(accessToken)
+        .from('profiles')
+        .update(values)
+        .eq('id', userId)
         .select('display_name,email,role')
         .maybeSingle();
       if (error !== null) throw error;

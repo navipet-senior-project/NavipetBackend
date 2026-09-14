@@ -16,6 +16,9 @@ create table if not exists public.profiles (
 
 alter table public.profiles enable row level security;
 
+grant select, update on table public.profiles to authenticated;
+grant select, update on table public.profiles to service_role;
+
 drop policy if exists "Profiles are readable by their owner" on public.profiles;
 create policy "Profiles are readable by their owner"
 on public.profiles for select

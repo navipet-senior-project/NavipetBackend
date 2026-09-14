@@ -61,4 +61,81 @@ describe('profiles', () => {
     });
     expect(response.statusCode).toBe(404);
   });
+
+  it('updates the authenticated profile display name', async () => {
+    const updateProfile = vi.fn().mockResolvedValue({
+      displayName: 'Professor Jane Doe',
+      email: 'professor@example.com',
+      role: 'professor',
+    });
+    app = await buildTestApp({}, {
+      supabaseResources: { ...createSupabaseResources(TEST_ENV), updateProfile },
+      authVerifier: { verify: vi.fn<JwtVerifier['verify']>().mockResolvedValue(verifiedUser) },
+    });
+
+    const response = await app.inject({
+      method: 'PATCH',
+      url: '/profiles/me',
+      headers: { authorization: 'Bearer valid-access-token' },
+      payload: {
+        displayName: '  Professor Jane Doe  ',
+        email: 'Professor@Example.com',
+        role: 'professor',
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({
+      profile: {
+        displayName: 'Professor Jane Doe',
+        email: 'professor@example.com',
+        role: 'professor',
+      },
+    });
+    expect(updateProfile).toHaveBeenCalledWith(
+      'valid-access-token',
+      verifiedUser.id,
+      {
+        displayName: 'Professor Jane Doe',
+        email: 'professor@example.com',
+        role: 'professor',
+      },
+    );
+  });
+
+  it('rejects unexpected profile fields', async () => {
+    const updateProfile = vi.fn();
+    app = await buildTestApp({}, {
+      supabaseResources: { ...createSupabaseResources(TEST_ENV), updateProfile },
+      authVerifier: { verify: vi.fn<JwtVerifier['verify']>().mockResolvedValue(verifiedUser) },
+    });
+
+    const response = await app.inject({
+      method: 'PATCH',
+      url: '/profiles/me',
+      headers: { authorization: 'Bearer valid-access-token' },
+      payload: { displayName: 'Jane Doe', timezone: 'PST' },
+    });
+
+    expect(response.statusCode).toBe(422);
+    expect(updateProfile).not.toHaveBeenCalled();
+  });
+
+  it('rejects an invalid role', async () => {
+    const updateProfile = vi.fn();
+    app = await buildTestApp({}, {
+      supabaseResources: { ...createSupabaseResources(TEST_ENV), updateProfile },
+      authVerifier: { verify: vi.fn<JwtVerifier['verify']>().mockResolvedValue(verifiedUser) },
+    });
+
+    const response = await app.inject({
+      method: 'PATCH',
+      url: '/profiles/me',
+      headers: { authorization: 'Bearer valid-access-token' },
+      payload: { role: 'administrator' },
+    });
+
+    expect(response.statusCode).toBe(422);
+    expect(updateProfile).not.toHaveBeenCalled();
+  });
 });

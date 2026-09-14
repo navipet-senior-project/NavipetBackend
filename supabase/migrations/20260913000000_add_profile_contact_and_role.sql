@@ -3,6 +3,9 @@ alter table public.profiles
   add column if not exists email text,
   add column if not exists role text;
 
+grant select, update on table public.profiles to authenticated;
+grant select, update on table public.profiles to service_role;
+
 update public.profiles as profiles
 set email = users.email
 from auth.users as users

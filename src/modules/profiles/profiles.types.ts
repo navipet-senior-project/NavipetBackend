@@ -7,3 +7,9 @@ export interface ProfileRecord {
   email: string | null;
   role: ProfileRole | null;
 }
+
+export interface UpdateProfileInput {
+  displayName?: string;
+  email?: string;
+  role?: ProfileRole;
+}
