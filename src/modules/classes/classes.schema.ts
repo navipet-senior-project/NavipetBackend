@@ -2,6 +2,12 @@ import Type from 'typebox';
 
 import { ErrorResponseSchema } from '../../common/errors/error-response.schema.js';
 
+// Status contract (all routes require a bearer token -> 401; 422 validation; 429; 502 storage):
+//   GET    /classes            200
+//   POST   /classes            201 | 404 building/address | 409 time conflict or duplicate
+//   PATCH  /classes/:classId   200 | 404 class or building | 409 time conflict or duplicate
+//   DELETE /classes/:classId   204 | 404
+
 const UuidSchema = Type.String({
   pattern: '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$',
 });
@@ -51,6 +57,47 @@ const ClassResponseSchema = Type.Object(
   },
 );
 
+const ClassConflictSchema = Type.Object(
+  {
+    existingClassId: UuidSchema,
+    existingCourse: Type.String({ example: 'CECS 274' }),
+    day: Type.String({ example: 'Tu', description: 'CSULB day label: M, Tu, W, Th, F, Sa, Su.' }),
+    newTime: Type.String({ example: '4:00 PM-6:45 PM' }),
+    existingTime: Type.String({ example: '4:00 PM-5:50 PM' }),
+    location: Type.String({ example: 'Vivian Engineering Center 3-3' }),
+  },
+  { additionalProperties: false },
+);
+
+// Same envelope as ErrorResponseSchema, plus the optional detail fields the
+// classes service attaches to its 409s. Declared here because response
+// serialization drops any property the schema does not list.
+const ClassScheduleConflictResponseSchema = Type.Object(
+  {
+    error: Type.Object({
+      code: Type.String({ example: 'CLASS_TIME_CONFLICT' }),
+      message: Type.String(),
+      requestId: Type.String(),
+      conflicts: Type.Optional(Type.Array(ClassConflictSchema)),
+      existingClassId: Type.Optional(UuidSchema),
+    }),
+  },
+  {
+    description:
+      '`CLASS_TIME_CONFLICT`: the schedule overlaps an existing class on at least one shared weekday; ' +
+      '`conflicts` lists every overlapping class and day.\n\n' +
+      '`DUPLICATE_CLASS`: the same course code with the same schedule is already on the schedule; ' +
+      '`existingClassId` names it.',
+  },
+);
+
+const scheduleConflictDescription =
+  '### Schedule conflicts\n\n' +
+  'Two classes conflict when they share a weekday and their times overlap.\n\n' +
+  'Back-to-back classes are allowed: one ending at 10:00 and one starting at 10:00 do not conflict.\n\n' +
+  'A class with an empty `weekdays` list is asynchronous and never conflicts.\n\n' +
+  'A conflicting or duplicate class is rejected with 409 and nothing is saved.';
+
 const ClassIdParamsSchema = Type.Object({ classId: UuidSchema }, { additionalProperties: false });
 
 const commonErrors = {
@@ -83,8 +130,8 @@ export const CreateClassRouteSchema = {
     '`building` accepts either a CSULB building name or code (resolved against the campus dataset) or a plain ' +
     'address (forward-geocoded with Mapbox). Either way the stored class gets a resolved display name plus ' +
     'latitude/longitude, used later for class-aware navigation.\n\n' +
-    '`weekdays`, `startTime`, and `endTime` are validated but not otherwise interpreted server-side.\n\n' +
-    'A request where the end time is not later than the start time returns 422.',
+    'A request where the end time is not later than the start time returns 422.\n\n' +
+    scheduleConflictDescription,
   body: Type.Object(ClassFieldsSchema, { additionalProperties: false }),
   response: {
     201: Type.Object(
@@ -92,6 +139,7 @@ export const CreateClassRouteSchema = {
       { description: 'The class was created.' },
     ),
     404: ErrorResponseSchema('Building or address not found.'),
+    409: ClassScheduleConflictResponseSchema,
     ...commonErrors,
   },
 };
@@ -102,8 +150,10 @@ export const UpdateClassRouteSchema = {
     'Partial update: send only the fields being changed. An empty body returns 422.\n\n' +
     'Omitting `building` leaves the stored coordinates untouched.\n\n' +
     'Sending `building` re-resolves the coordinates the same way `POST /classes` does.\n\n' +
-    'Sending both `startTime` and `endTime` together validates that the end time is later than the start time. ' +
-    'Changing only one of them is not cross-checked against the class\'s stored value for the other.',
+    'Changing `weekdays`, `startTime`, `endTime`, or `courseCode` re-checks the merged schedule: ' +
+    'the end time must stay later than the start time (422), and the class must not conflict with any ' +
+    'other class on the schedule (409).\n\n' +
+    scheduleConflictDescription,
   params: ClassIdParamsSchema,
   body: Type.Partial(Type.Object(ClassFieldsSchema, { additionalProperties: false })),
   response: {
@@ -112,6 +162,7 @@ export const UpdateClassRouteSchema = {
       { description: 'The class was updated.' },
     ),
     404: ErrorResponseSchema('Class not found, or building/address not found.'),
+    409: ClassScheduleConflictResponseSchema,
     ...commonErrors,
   },
 };

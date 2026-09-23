@@ -3,7 +3,11 @@ import { AppError } from '../../common/errors/app-error.js';
 import { ErrorCode } from '../../common/errors/error-codes.js';
 import type { CampusDestinationRecord, ExternalPlacesGateway } from '../campus/campus.types.js';
 import { createOutdoorFallbackResolver } from '../campus/outdoor-fallback.js';
+import { findClassConflicts, findDuplicateClass, type ClassSchedule } from './class-conflicts.js';
 import type { ClassRecord, CreateClassInput, UpdateClassInput } from './classes.types.js';
+
+/** Raised by the `classes_prevent_time_conflict` trigger (exclusion_violation). */
+const TIME_CONFLICT_SQLSTATE = '23P01';
 
 function withSeconds(time: string): string {
   return time.length === 5 ? `${time}:00` : time;
@@ -71,29 +75,98 @@ async function resolveBuilding(
   return { name: external.name, coordinates: { latitude: external.latitude, longitude: external.longitude } };
 }
 
+function isTimeConflictViolation(cause: unknown): boolean {
+  return typeof cause === 'object' && cause !== null && 'code' in cause && cause.code === TIME_CONFLICT_SQLSTATE;
+}
+
+function assertSchedulable(schedule: ClassSchedule, existing: readonly ClassRecord[], ignoreClassId?: string): void {
+  const duplicate = findDuplicateClass(schedule, existing, ignoreClassId);
+  if (duplicate !== undefined) {
+    throw new AppError({
+      code: ErrorCode.DUPLICATE_CLASS,
+      statusCode: 409,
+      message: 'This class is already on your schedule.',
+      details: { existingClassId: duplicate.id },
+    });
+  }
+  const conflicts = findClassConflicts(schedule, existing, ignoreClassId);
+  if (conflicts.length > 0) throw timeConflictError(conflicts);
+}
+
+function timeConflictError(conflicts: ReturnType<typeof findClassConflicts>, cause?: unknown): AppError {
+  return new AppError({
+    code: ErrorCode.CLASS_TIME_CONFLICT,
+    statusCode: 409,
+    message: 'This class conflicts with an existing class.',
+    details: { conflicts },
+    ...(cause === undefined ? {} : { cause }),
+  });
+}
+
 export function createClassesService(gateway: SupabaseResources, externalPlaces: ExternalPlacesGateway) {
+  /**
+   * The service check produces the detailed 409. The database trigger is the
+   * race-proof backstop: two concurrent requests can both pass the service
+   * check, but the trigger serializes them per user and rejects the loser.
+   */
+  async function persistOrExplainConflict<T>(
+    accessToken: string,
+    schedule: ClassSchedule,
+    ignoreClassId: string | undefined,
+    write: () => Promise<T>,
+  ): Promise<T> {
+    try {
+      return await write();
+    } catch (cause) {
+      if (!isTimeConflictViolation(cause)) throw cause;
+      const current = await gateway.listClasses(accessToken);
+      throw timeConflictError(findClassConflicts(schedule, current, ignoreClassId), cause);
+    }
+  }
+
   return {
     list: (accessToken: string) => gateway.listClasses(accessToken),
     create: async (accessToken: string, userId: string, input: CreateClassInput) => {
       validateTimeOrder(input.startTime, input.endTime);
+      assertSchedulable(input, await gateway.listClasses(accessToken));
       const building = await resolveBuilding(gateway, externalPlaces, input.building);
-      return gateway.createClass(accessToken, userId, {
-        ...input,
-        building: building.name,
-        latitude: building.coordinates.latitude,
-        longitude: building.coordinates.longitude,
-      });
+      return persistOrExplainConflict(accessToken, input, undefined, () =>
+        gateway.createClass(accessToken, userId, {
+          ...input,
+          building: building.name,
+          latitude: building.coordinates.latitude,
+          longitude: building.coordinates.longitude,
+        }),
+      );
     },
     update: async (accessToken: string, classId: string, input: UpdateClassInput) => {
       validateTimeOrder(input.startTime, input.endTime);
-      if (input.building === undefined) return gateway.updateClass(accessToken, classId, input);
-      const building = await resolveBuilding(gateway, externalPlaces, input.building);
-      return gateway.updateClass(accessToken, classId, {
-        ...input,
-        building: building.name,
-        latitude: building.coordinates.latitude,
-        longitude: building.coordinates.longitude,
-      });
+      const touchesSchedule = input.courseCode !== undefined || input.weekdays !== undefined ||
+        input.startTime !== undefined || input.endTime !== undefined;
+      let schedule: ClassSchedule | undefined;
+      if (touchesSchedule) {
+        const existing = await gateway.listClasses(accessToken);
+        const stored = existing.find((record) => record.id === classId);
+        if (stored === undefined) return null;
+        schedule = {
+          courseCode: input.courseCode ?? stored.courseCode,
+          weekdays: input.weekdays ?? stored.weekdays,
+          startTime: input.startTime ?? stored.startTime,
+          endTime: input.endTime ?? stored.endTime,
+        };
+        validateTimeOrder(schedule.startTime, schedule.endTime);
+        assertSchedulable(schedule, existing, classId);
+      }
+      const values = input.building === undefined
+        ? input
+        : await resolveBuilding(gateway, externalPlaces, input.building).then((building) => ({
+          ...input,
+          building: building.name,
+          latitude: building.coordinates.latitude,
+          longitude: building.coordinates.longitude,
+        }));
+      const write = () => gateway.updateClass(accessToken, classId, values);
+      return schedule === undefined ? write() : persistOrExplainConflict(accessToken, schedule, classId, write);
     },
     delete: (accessToken: string, classId: string) => gateway.deleteClass(accessToken, classId),
   };
