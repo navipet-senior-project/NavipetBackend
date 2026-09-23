@@ -121,9 +121,10 @@ const errorHandlerPlugin: FastifyPluginCallback = (fastify, _options, done) => {
           ),
         );
       }
+      const errorBody = body(error.code, error.message, request.id);
       return reply
         .status(error.statusCode)
-        .send(body(error.code, error.message, request.id));
+        .send({ error: { ...error.details, ...errorBody.error } });
     }
 
     request.log.error({ errorName: error.name }, 'Unhandled request failure');
