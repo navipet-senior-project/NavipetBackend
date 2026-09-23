@@ -72,18 +72,26 @@ export function parseCsulbTimeRange(value: string): ParsedTimeRange | null {
   if (endTime === null) return null;
   const endMeridiem = meridiemOf(endText);
 
-  let startTime = parseClockTime(startText);
-  if (startTime === null) {
+  const startMeridiem = meridiemOf(startText);
+  let startTime: string | null;
+  if (endMeridiem !== null && startMeridiem === null) {
+    // A start with no AM/PM ("4" in "4-6:45PM", "12:30" in "12:30-3:15PM")
+    // takes the end's. It is read as 12-hour even when it would also be a
+    // valid 24-hour time, because the end already set the clock.
     const bare = BARE_HOUR.exec(startText.trim());
-    // A bare start ("4" in "4-6:45PM") needs the end's AM/PM to mean anything.
-    if (bare === null || endMeridiem === null) return null;
+    if (bare === null) return null;
     const hour = Number(bare[1]);
     const minute = Number(bare[2] ?? '0');
     startTime = fromTwelveHour(hour, minute, endMeridiem);
-    if (secondsFromMidnight(startTime) >= secondsFromMidnight(endTime) && endMeridiem === 'P') startTime = fromTwelveHour(hour, minute, 'A');
-  } else if ((meridiemOf(startText) === null) !== (endMeridiem === null)) {
-    // Mixing a 24-hour start with a 12-hour end (or vice versa) is ambiguous.
+    if (secondsFromMidnight(startTime) >= secondsFromMidnight(endTime) && endMeridiem === 'P') {
+      startTime = fromTwelveHour(hour, minute, 'A');
+    }
+  } else if (endMeridiem === null && startMeridiem !== null) {
+    // A 12-hour start with a 24-hour end is ambiguous.
     return null;
+  } else {
+    startTime = parseClockTime(startText);
+    if (startTime === null) return null;
   }
 
   return secondsFromMidnight(startTime) < secondsFromMidnight(endTime) ? { kind: 'scheduled', startTime, endTime } : null;
