@@ -2,6 +2,12 @@ import Type from 'typebox';
 
 import { ErrorResponseSchema } from '../../common/errors/error-response.schema.js';
 
+// Status contract (all routes require a bearer token -> 401; 422 validation; 429; 502 storage):
+//   GET    /classes            200
+//   POST   /classes            201 | 404 building/address | 409 time conflict or duplicate
+//   PATCH  /classes/:classId   200 | 404 class or building | 409 time conflict or duplicate
+//   DELETE /classes/:classId   204 | 404
+
 const UuidSchema = Type.String({
   pattern: '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$',
 });
@@ -24,23 +30,49 @@ const ClassFieldsSchema = {
     example: [1, 3, 5],
     description: 'ISO weekdays the class meets: 1 = Monday ... 7 = Sunday.',
   }),
-  startTime: Type.String({
-    pattern: '^([01][0-9]|2[0-3]):[0-5][0-9](:[0-5][0-9])?$',
-    example: '11:00',
-    description: '24-hour local time, "HH:MM" or "HH:MM:SS".',
-  }),
-  endTime: Type.String({
-    pattern: '^([01][0-9]|2[0-3]):[0-5][0-9](:[0-5][0-9])?$',
-    example: '12:15',
-    description: '24-hour local time, "HH:MM" or "HH:MM:SS". Must be later than `startTime`.',
-  }),
 };
+
+const CLOCK_TIME_PATTERN =
+  '^(([01][0-9]|2[0-3]):[0-5][0-9](:[0-5][0-9])?|(0?[1-9]|1[0-2])(:[0-5][0-9])? ?[AaPp][Mm])$';
+
+const StoredTimeSchema = Type.String({
+  pattern: '^([01][0-9]|2[0-3]):[0-5][0-9](:[0-5][0-9])?$',
+  description: '24-hour local time as stored, "HH:MM:SS".',
+});
+
+// Request-only time fields. Either `time` (a CSULB schedule range) or
+// `startTime` + `endTime`; the service rejects a mix of both with 422.
+const ClassTimeInputSchema = {
+  startTime: Type.Optional(Type.String({
+    pattern: CLOCK_TIME_PATTERN,
+    example: '11:00',
+    description: 'Local start time: 24-hour "HH:MM" / "HH:MM:SS", or 12-hour "4:00 PM" / "4PM". Omit when sending `time`.',
+  })),
+  endTime: Type.Optional(Type.String({
+    pattern: CLOCK_TIME_PATTERN,
+    example: '12:15',
+    description: 'Local end time, same formats as `startTime`. Must be later than `startTime`. Omit when sending `time`.',
+  })),
+  time: Type.Optional(Type.String({
+    minLength: 1,
+    maxLength: 40,
+    example: '4-6:45PM',
+    description:
+      'A CSULB schedule time range such as "8-8:50AM", "12:30-3:15PM", "4-6:45PM", or "10:30AM-1:15PM". ' +
+      'AM/PM written once applies to both ends unless the range crosses noon ("11-12:15PM" is 11:00 AM-12:15 PM). ' +
+      'Replaces `startTime` + `endTime`. "NA/NA" (no scheduled time) is rejected with 422.',
+  })),
+};
+
+const ClassInputSchema = { ...ClassFieldsSchema, ...ClassTimeInputSchema };
 
 const ClassResponseSchema = Type.Object(
   {
     id: UuidSchema,
     ...ClassFieldsSchema,
     room: Type.String(),
+    startTime: StoredTimeSchema,
+    endTime: StoredTimeSchema,
     createdAt: Type.String(),
     updatedAt: Type.String(),
   },
@@ -50,6 +82,47 @@ const ClassResponseSchema = Type.Object(
     description: 'The stored class, with `building` resolved to its canonical display name.',
   },
 );
+
+const ClassConflictSchema = Type.Object(
+  {
+    existingClassId: UuidSchema,
+    existingCourse: Type.String({ example: 'CECS 274' }),
+    day: Type.String({ example: 'Tu', description: 'CSULB day label: M, Tu, W, Th, F, Sa, Su.' }),
+    newTime: Type.String({ example: '4:00 PM-6:45 PM' }),
+    existingTime: Type.String({ example: '4:00 PM-5:50 PM' }),
+    location: Type.String({ example: 'Vivian Engineering Center 3-3' }),
+  },
+  { additionalProperties: false },
+);
+
+// Same envelope as ErrorResponseSchema, plus the optional detail fields the
+// classes service attaches to its 409s. Declared here because response
+// serialization drops any property the schema does not list.
+const ClassScheduleConflictResponseSchema = Type.Object(
+  {
+    error: Type.Object({
+      code: Type.String({ example: 'CLASS_TIME_CONFLICT' }),
+      message: Type.String(),
+      requestId: Type.String(),
+      conflicts: Type.Optional(Type.Array(ClassConflictSchema)),
+      existingClassId: Type.Optional(UuidSchema),
+    }),
+  },
+  {
+    description:
+      '`CLASS_TIME_CONFLICT`: the schedule overlaps an existing class on at least one shared weekday; ' +
+      '`conflicts` lists every overlapping class and day.\n\n' +
+      '`DUPLICATE_CLASS`: the same course code with the same schedule is already on the schedule; ' +
+      '`existingClassId` names it.',
+  },
+);
+
+const scheduleConflictDescription =
+  '### Schedule conflicts\n\n' +
+  'Two classes conflict when they share a weekday and their times overlap.\n\n' +
+  'Back-to-back classes are allowed: one ending at 10:00 and one starting at 10:00 do not conflict.\n\n' +
+  'A class with an empty `weekdays` list is asynchronous and never conflicts.\n\n' +
+  'A conflicting or duplicate class is rejected with 409 and nothing is saved.';
 
 const ClassIdParamsSchema = Type.Object({ classId: UuidSchema }, { additionalProperties: false });
 
@@ -83,15 +156,18 @@ export const CreateClassRouteSchema = {
     '`building` accepts either a CSULB building name or code (resolved against the campus dataset) or a plain ' +
     'address (forward-geocoded with Mapbox). Either way the stored class gets a resolved display name plus ' +
     'latitude/longitude, used later for class-aware navigation.\n\n' +
-    '`weekdays`, `startTime`, and `endTime` are validated but not otherwise interpreted server-side.\n\n' +
-    'A request where the end time is not later than the start time returns 422.',
-  body: Type.Object(ClassFieldsSchema, { additionalProperties: false }),
+    'Send the time either as `time` (a CSULB range like "4-6:45PM") or as `startTime` + `endTime` ' +
+    '(24-hour or AM/PM). Sending both forms, neither, or an unparseable or ambiguous time returns 422.\n\n' +
+    'A request where the end time is not later than the start time returns 422.\n\n' +
+    scheduleConflictDescription,
+  body: Type.Object(ClassInputSchema, { additionalProperties: false }),
   response: {
     201: Type.Object(
       { class: ClassResponseSchema },
       { description: 'The class was created.' },
     ),
     404: ErrorResponseSchema('Building or address not found.'),
+    409: ClassScheduleConflictResponseSchema,
     ...commonErrors,
   },
 };
@@ -102,16 +178,20 @@ export const UpdateClassRouteSchema = {
     'Partial update: send only the fields being changed. An empty body returns 422.\n\n' +
     'Omitting `building` leaves the stored coordinates untouched.\n\n' +
     'Sending `building` re-resolves the coordinates the same way `POST /classes` does.\n\n' +
-    'Sending both `startTime` and `endTime` together validates that the end time is later than the start time. ' +
-    'Changing only one of them is not cross-checked against the class\'s stored value for the other.',
+    '`time` replaces both `startTime` and `endTime`; it cannot be combined with either.\n\n' +
+    'Changing `weekdays`, `time`, `startTime`, `endTime`, or `courseCode` re-checks the merged schedule: ' +
+    'the end time must stay later than the start time (422), and the class must not conflict with any ' +
+    'other class on the schedule (409).\n\n' +
+    scheduleConflictDescription,
   params: ClassIdParamsSchema,
-  body: Type.Partial(Type.Object(ClassFieldsSchema, { additionalProperties: false })),
+  body: Type.Partial(Type.Object(ClassInputSchema, { additionalProperties: false })),
   response: {
     200: Type.Object(
       { class: ClassResponseSchema },
       { description: 'The class was updated.' },
     ),
     404: ErrorResponseSchema('Class not found, or building/address not found.'),
+    409: ClassScheduleConflictResponseSchema,
     ...commonErrors,
   },
 };

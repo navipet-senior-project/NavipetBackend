@@ -29,6 +29,22 @@ export interface CreateClassInput {
 
 export type UpdateClassInput = Partial<CreateClassInput>;
 
+/**
+ * Time fields as the API accepts them: a CSULB range in `time`, or a start
+ * and end in 24-hour or AM/PM form. The service normalizes them to the
+ * 24-hour `startTime`/`endTime` of `CreateClassInput`.
+ */
+export interface ClassTimeRequest {
+  time?: string;
+  startTime?: string;
+  endTime?: string;
+}
+
+export type CreateClassRequest =
+  Omit<CreateClassInput, 'startTime' | 'endTime' | 'latitude' | 'longitude'> & ClassTimeRequest;
+
+export type UpdateClassRequest = Partial<CreateClassRequest>;
+
 export interface ClassesGateway {
   listClasses(accessToken: string): Promise<ClassRecord[]>;
   createClass(accessToken: string, userId: string, input: CreateClassInput): Promise<ClassRecord>;

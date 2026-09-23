@@ -413,4 +413,333 @@ describe('classes routes', () => {
     expect(response.statusCode).toBe(422);
     expect(response.json()).toMatchObject({ error: { code: anyString } });
   });
+
+  describe('schedule conflicts', () => {
+    const auth = { authorization: 'Bearer valid-access-token' };
+    const classUrl = `/classes/${classRecord().id}`;
+    const vecBuilding = building({ latitude: 33.783, longitude: -118.112 });
+    // CECS 274 on Tu/Th 16:00-17:50, already on the schedule.
+    const cecs274 = classRecord({
+      id: '00000000-0000-4000-8000-0000000000c2',
+      courseCode: 'CECS 274',
+      weekdays: [2, 4],
+      startTime: '16:00:00',
+      endTime: '17:50:00',
+    });
+    const conflictingBody = { ...createBody, courseCode: 'CECS 323', weekdays: [2], startTime: '16:00', endTime: '18:45' };
+
+    it('rejects a conflicting class with 409, lists the conflicts, and saves nothing', async () => {
+      const createClass = vi.fn();
+      const findBuildingByCode = vi.fn().mockResolvedValue(vecBuilding);
+      app = await buildTestApp({}, {
+        supabaseResources: resources({ listClasses: vi.fn().mockResolvedValue([cecs274]), createClass, findBuildingByCode }),
+        externalPlaces: noExternal(),
+        authVerifier: verifiedVerifier(),
+      });
+
+      const response = await app.inject({ method: 'POST', url: '/classes', headers: auth, payload: conflictingBody });
+
+      expect(response.statusCode).toBe(409);
+      expect(response.json()).toEqual({
+        error: {
+          code: 'CLASS_TIME_CONFLICT',
+          message: 'This class conflicts with an existing class.',
+          requestId: anyString,
+          conflicts: [
+            {
+              existingClassId: cecs274.id,
+              existingCourse: 'CECS 274',
+              day: 'Tu',
+              newTime: '4:00 PM-6:45 PM',
+              existingTime: '4:00 PM-5:50 PM',
+              location: 'Vivian Engineering Center 3-3',
+            },
+          ],
+        },
+      });
+      expect(createClass).not.toHaveBeenCalled();
+      expect(findBuildingByCode).not.toHaveBeenCalled();
+    });
+
+    it('rejects adding the same class twice with 409 DUPLICATE_CLASS', async () => {
+      const createClass = vi.fn();
+      app = await buildTestApp({}, {
+        supabaseResources: resources({ listClasses: vi.fn().mockResolvedValue([cecs274]), createClass }),
+        externalPlaces: noExternal(),
+        authVerifier: verifiedVerifier(),
+      });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/classes',
+        headers: auth,
+        payload: { ...createBody, courseCode: 'cecs 274', weekdays: [4, 2], startTime: '16:00', endTime: '17:50' },
+      });
+
+      expect(response.statusCode).toBe(409);
+      expect(response.json()).toEqual({
+        error: {
+          code: 'DUPLICATE_CLASS',
+          message: 'This class is already on your schedule.',
+          requestId: anyString,
+          existingClassId: cecs274.id,
+        },
+      });
+      expect(createClass).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      ['a back-to-back class', { weekdays: [2], startTime: '17:50', endTime: '18:40' }],
+      ['the same time on other weekdays', { weekdays: [1, 3], startTime: '16:00', endTime: '17:50' }],
+      ['an asynchronous class with no weekdays', { weekdays: [], startTime: '16:00', endTime: '17:50' }],
+    ])('accepts %s', async (_label, schedule) => {
+      const createClass = vi.fn().mockResolvedValue(classRecord());
+      app = await buildTestApp({}, {
+        supabaseResources: resources({
+          listClasses: vi.fn().mockResolvedValue([cecs274]),
+          createClass,
+          findBuildingByCode: vi.fn().mockResolvedValue(vecBuilding),
+        }),
+        externalPlaces: noExternal(),
+        authVerifier: verifiedVerifier(),
+      });
+
+      const response = await app.inject({ method: 'POST', url: '/classes', headers: auth, payload: { ...createBody, ...schedule } });
+
+      expect(response.statusCode).toBe(201);
+      expect(createClass).toHaveBeenCalledOnce();
+    });
+
+    it('maps a concurrent-add conflict caught by the database trigger to the same 409', async () => {
+      // The service check sees an empty schedule, then a concurrent request
+      // commits CECS 274 first and the trigger rejects this insert.
+      const listClasses = vi.fn().mockResolvedValueOnce([]).mockResolvedValueOnce([cecs274]);
+      const createClass = vi.fn().mockRejectedValue({ code: '23P01', message: 'class time conflict' });
+      app = await buildTestApp({}, {
+        supabaseResources: resources({ listClasses, createClass, findBuildingByCode: vi.fn().mockResolvedValue(vecBuilding) }),
+        externalPlaces: noExternal(),
+        authVerifier: verifiedVerifier(),
+      });
+
+      const response = await app.inject({ method: 'POST', url: '/classes', headers: auth, payload: conflictingBody });
+
+      expect(response.statusCode).toBe(409);
+      expect(response.json()).toMatchObject({
+        error: { code: 'CLASS_TIME_CONFLICT', conflicts: [{ existingClassId: cecs274.id, day: 'Tu' }] },
+      });
+      expect(response.body).not.toContain('class time conflict');
+    });
+
+    it('still returns a generic 502 for other storage failures', async () => {
+      app = await buildTestApp({}, {
+        supabaseResources: resources({
+          createClass: vi.fn().mockRejectedValue({ code: '23505', message: 'duplicate key' }),
+          findBuildingByCode: vi.fn().mockResolvedValue(vecBuilding),
+        }),
+        externalPlaces: noExternal(),
+        authVerifier: verifiedVerifier(),
+      });
+
+      const response = await app.inject({ method: 'POST', url: '/classes', headers: auth, payload: createBody });
+
+      expect(response.statusCode).toBe(502);
+      expect(response.json()).toEqual({ error: { code: 'INTERNAL_ERROR', message: 'Internal server error', requestId: anyString } });
+    });
+
+    it('rejects a PATCH that moves a class onto another class and does not write', async () => {
+      const updateClass = vi.fn();
+      app = await buildTestApp({}, {
+        supabaseResources: resources({ listClasses: vi.fn().mockResolvedValue([classRecord(), cecs274]), updateClass }),
+        externalPlaces: noExternal(),
+        authVerifier: verifiedVerifier(),
+      });
+
+      const response = await app.inject({
+        method: 'PATCH',
+        url: classUrl,
+        headers: auth,
+        payload: { weekdays: [4], startTime: '17:00', endTime: '18:00' },
+      });
+
+      expect(response.statusCode).toBe(409);
+      expect(response.json()).toMatchObject({
+        error: { code: 'CLASS_TIME_CONFLICT', conflicts: [{ existingCourse: 'CECS 274', day: 'Th' }] },
+      });
+      expect(updateClass).not.toHaveBeenCalled();
+    });
+
+    it('does not conflict a PATCHed class with its own stored schedule', async () => {
+      const updateClass = vi.fn().mockResolvedValue(classRecord({ endTime: '12:30' }));
+      app = await buildTestApp({}, {
+        supabaseResources: resources({ listClasses: vi.fn().mockResolvedValue([classRecord()]), updateClass }),
+        externalPlaces: noExternal(),
+        authVerifier: verifiedVerifier(),
+      });
+
+      const response = await app.inject({ method: 'PATCH', url: classUrl, headers: auth, payload: { endTime: '12:30' } });
+
+      expect(response.statusCode).toBe(200);
+      expect(updateClass).toHaveBeenCalledWith('valid-access-token', classRecord().id, { endTime: '12:30' });
+    });
+
+    it('validates a PATCHed time against the stored value of the other end', async () => {
+      const updateClass = vi.fn();
+      app = await buildTestApp({}, {
+        supabaseResources: resources({ listClasses: vi.fn().mockResolvedValue([classRecord()]), updateClass }),
+        externalPlaces: noExternal(),
+        authVerifier: verifiedVerifier(),
+      });
+
+      // Stored class runs 11:00-12:15; moving only the start past the end is invalid.
+      const response = await app.inject({ method: 'PATCH', url: classUrl, headers: auth, payload: { startTime: '13:00' } });
+
+      expect(response.statusCode).toBe(422);
+      expect(response.json()).toMatchObject({ error: { code: 'VALIDATION_ERROR' } });
+      expect(updateClass).not.toHaveBeenCalled();
+    });
+
+    it('returns 404 for a schedule PATCH on a class that is not on the schedule', async () => {
+      const updateClass = vi.fn();
+      app = await buildTestApp({}, {
+        supabaseResources: resources({ listClasses: vi.fn().mockResolvedValue([cecs274]), updateClass }),
+        externalPlaces: noExternal(),
+        authVerifier: verifiedVerifier(),
+      });
+
+      const response = await app.inject({ method: 'PATCH', url: classUrl, headers: auth, payload: { weekdays: [1] } });
+
+      expect(response.statusCode).toBe(404);
+      expect(updateClass).not.toHaveBeenCalled();
+    });
+
+    it('skips the schedule lookup for a PATCH that does not touch the schedule', async () => {
+      const listClasses = vi.fn();
+      app = await buildTestApp({}, {
+        supabaseResources: resources({ listClasses }),
+        externalPlaces: noExternal(),
+        authVerifier: verifiedVerifier(),
+      });
+
+      const response = await app.inject({ method: 'PATCH', url: classUrl, headers: auth, payload: { room: '1-1' } });
+
+      expect(response.statusCode).toBe(200);
+      expect(listClasses).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('time formats', () => {
+    const auth = { authorization: 'Bearer valid-access-token' };
+    const classUrl = `/classes/${classRecord().id}`;
+    const untimedBody = {
+      courseCode: createBody.courseCode,
+      courseName: createBody.courseName,
+      building: createBody.building,
+      room: createBody.room,
+      weekdays: createBody.weekdays,
+    };
+
+    function createApp(overrides: Partial<SupabaseResources> = {}) {
+      return buildTestApp({}, {
+        supabaseResources: resources({
+          findBuildingByCode: vi.fn().mockResolvedValue(building({ latitude: 33.783, longitude: -118.112 })),
+          ...overrides,
+        }),
+        externalPlaces: noExternal(),
+        authVerifier: verifiedVerifier(),
+      });
+    }
+
+    it.each([
+      ['a CSULB range in time', { time: '4-6:45PM' }],
+      ['AM/PM startTime and endTime', { startTime: '4:00 PM', endTime: '6:45pm' }],
+      ['24-hour startTime and endTime', { startTime: '16:00', endTime: '18:45' }],
+    ])('stores %s as 24-hour times', async (_label, times) => {
+      const createClass = vi.fn().mockResolvedValue(classRecord());
+      app = await createApp({ createClass });
+
+      const response = await app.inject({ method: 'POST', url: '/classes', headers: auth, payload: { ...untimedBody, ...times } });
+
+      expect(response.statusCode).toBe(201);
+      expect(createClass).toHaveBeenCalledWith(
+        'valid-access-token',
+        verifiedUser.id,
+        expect.objectContaining({ startTime: '16:00', endTime: '18:45' }),
+      );
+      expect(createClass.mock.calls[0]?.[2]).not.toHaveProperty('time');
+    });
+
+    it('checks conflicts on the normalized times', async () => {
+      const createClass = vi.fn();
+      const cecs274 = classRecord({ id: '00000000-0000-4000-8000-0000000000c2', courseCode: 'CECS 274', weekdays: [1, 3, 5], startTime: '11:00:00', endTime: '11:50:00' });
+      app = await createApp({ listClasses: vi.fn().mockResolvedValue([cecs274]), createClass });
+
+      const response = await app.inject({ method: 'POST', url: '/classes', headers: auth, payload: { ...untimedBody, time: '11-12:15PM' } });
+
+      expect(response.statusCode).toBe(409);
+      expect(response.json()).toMatchObject({
+        error: {
+          code: 'CLASS_TIME_CONFLICT',
+          conflicts: ['M', 'W', 'F'].map((day) =>
+            expect.objectContaining({ day, newTime: '11:00 AM-12:15 PM', existingTime: '11:00 AM-11:50 AM' }) as unknown),
+        },
+      });
+      expect(createClass).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      ['time combined with startTime', { time: '4-6:45PM', startTime: '16:00' }, 'not both'],
+      ['no time at all', {}, 'Send `time`, or both'],
+      ['only startTime', { startTime: '4PM' }, 'Send `time`, or both'],
+      ['NA/NA', { time: 'NA/NA' }, 'NA/NA'],
+      ['an ambiguous range with no AM/PM', { time: '8-8:50' }, 'not a recognized'],
+      ['a range that ends before it starts', { time: '3PM-1PM' }, 'not a recognized'],
+      ['an AM/PM end before its start', { startTime: '4 PM', endTime: '3 PM' }, 'End time must be later'],
+    ])('returns 422 for %s', async (_label, times, message) => {
+      const createClass = vi.fn();
+      app = await createApp({ createClass });
+
+      const response = await app.inject({ method: 'POST', url: '/classes', headers: auth, payload: { ...untimedBody, ...times } });
+
+      expect(response.statusCode).toBe(422);
+      expect(response.json()).toMatchObject({ error: { code: 'VALIDATION_ERROR' } });
+      expect(response.json()).toMatchObject({ error: { message: expect.stringContaining(message) as unknown } });
+      expect(createClass).not.toHaveBeenCalled();
+    });
+
+    it.each(['8:00', '13PM', 'noon'])('rejects the malformed clock time %j at the schema', async (startTime) => {
+      app = await createApp();
+
+      const response = await app.inject({ method: 'POST', url: '/classes', headers: auth, payload: { ...createBody, startTime } });
+
+      expect(response.statusCode).toBe(422);
+    });
+
+    it('PATCHes with a CSULB range, writing both normalized times', async () => {
+      const updateClass = vi.fn().mockResolvedValue(classRecord());
+      app = await createApp({ listClasses: vi.fn().mockResolvedValue([classRecord()]), updateClass });
+
+      const response = await app.inject({ method: 'PATCH', url: classUrl, headers: auth, payload: { time: '12:30-3:15PM' } });
+
+      expect(response.statusCode).toBe(200);
+      expect(updateClass).toHaveBeenCalledWith('valid-access-token', classRecord().id, { startTime: '12:30', endTime: '15:15' });
+    });
+
+    it('PATCHes a single AM/PM time against the stored other end', async () => {
+      const updateClass = vi.fn().mockResolvedValue(classRecord());
+      app = await createApp({ listClasses: vi.fn().mockResolvedValue([classRecord()]), updateClass });
+
+      const response = await app.inject({ method: 'PATCH', url: classUrl, headers: auth, payload: { endTime: '12:45 PM' } });
+
+      expect(response.statusCode).toBe(200);
+      expect(updateClass).toHaveBeenCalledWith('valid-access-token', classRecord().id, { endTime: '12:45' });
+    });
+
+    it('returns stored times in 24-hour form', async () => {
+      app = await createApp({ listClasses: vi.fn().mockResolvedValue([classRecord({ startTime: '16:00:00', endTime: '18:45:00' })]) });
+
+      const response = await app.inject({ method: 'GET', url: '/classes', headers: auth });
+
+      expect(response.json()).toMatchObject({ classes: [{ startTime: '16:00:00', endTime: '18:45:00' }] });
+    });
+  });
 });
