@@ -30,23 +30,49 @@ const ClassFieldsSchema = {
     example: [1, 3, 5],
     description: 'ISO weekdays the class meets: 1 = Monday ... 7 = Sunday.',
   }),
-  startTime: Type.String({
-    pattern: '^([01][0-9]|2[0-3]):[0-5][0-9](:[0-5][0-9])?$',
-    example: '11:00',
-    description: '24-hour local time, "HH:MM" or "HH:MM:SS".',
-  }),
-  endTime: Type.String({
-    pattern: '^([01][0-9]|2[0-3]):[0-5][0-9](:[0-5][0-9])?$',
-    example: '12:15',
-    description: '24-hour local time, "HH:MM" or "HH:MM:SS". Must be later than `startTime`.',
-  }),
 };
+
+const CLOCK_TIME_PATTERN =
+  '^(([01][0-9]|2[0-3]):[0-5][0-9](:[0-5][0-9])?|(0?[1-9]|1[0-2])(:[0-5][0-9])? ?[AaPp][Mm])$';
+
+const StoredTimeSchema = Type.String({
+  pattern: '^([01][0-9]|2[0-3]):[0-5][0-9](:[0-5][0-9])?$',
+  description: '24-hour local time as stored, "HH:MM:SS".',
+});
+
+// Request-only time fields. Either `time` (a CSULB schedule range) or
+// `startTime` + `endTime`; the service rejects a mix of both with 422.
+const ClassTimeInputSchema = {
+  startTime: Type.Optional(Type.String({
+    pattern: CLOCK_TIME_PATTERN,
+    example: '11:00',
+    description: 'Local start time: 24-hour "HH:MM" / "HH:MM:SS", or 12-hour "4:00 PM" / "4PM". Omit when sending `time`.',
+  })),
+  endTime: Type.Optional(Type.String({
+    pattern: CLOCK_TIME_PATTERN,
+    example: '12:15',
+    description: 'Local end time, same formats as `startTime`. Must be later than `startTime`. Omit when sending `time`.',
+  })),
+  time: Type.Optional(Type.String({
+    minLength: 1,
+    maxLength: 40,
+    example: '4-6:45PM',
+    description:
+      'A CSULB schedule time range such as "8-8:50AM", "12:30-3:15PM", "4-6:45PM", or "10:30AM-1:15PM". ' +
+      'AM/PM written once applies to both ends unless the range crosses noon ("11-12:15PM" is 11:00 AM-12:15 PM). ' +
+      'Replaces `startTime` + `endTime`. "NA/NA" (no scheduled time) is rejected with 422.',
+  })),
+};
+
+const ClassInputSchema = { ...ClassFieldsSchema, ...ClassTimeInputSchema };
 
 const ClassResponseSchema = Type.Object(
   {
     id: UuidSchema,
     ...ClassFieldsSchema,
     room: Type.String(),
+    startTime: StoredTimeSchema,
+    endTime: StoredTimeSchema,
     createdAt: Type.String(),
     updatedAt: Type.String(),
   },
@@ -130,9 +156,11 @@ export const CreateClassRouteSchema = {
     '`building` accepts either a CSULB building name or code (resolved against the campus dataset) or a plain ' +
     'address (forward-geocoded with Mapbox). Either way the stored class gets a resolved display name plus ' +
     'latitude/longitude, used later for class-aware navigation.\n\n' +
+    'Send the time either as `time` (a CSULB range like "4-6:45PM") or as `startTime` + `endTime` ' +
+    '(24-hour or AM/PM). Sending both forms, neither, or an unparseable or ambiguous time returns 422.\n\n' +
     'A request where the end time is not later than the start time returns 422.\n\n' +
     scheduleConflictDescription,
-  body: Type.Object(ClassFieldsSchema, { additionalProperties: false }),
+  body: Type.Object(ClassInputSchema, { additionalProperties: false }),
   response: {
     201: Type.Object(
       { class: ClassResponseSchema },
@@ -150,12 +178,13 @@ export const UpdateClassRouteSchema = {
     'Partial update: send only the fields being changed. An empty body returns 422.\n\n' +
     'Omitting `building` leaves the stored coordinates untouched.\n\n' +
     'Sending `building` re-resolves the coordinates the same way `POST /classes` does.\n\n' +
-    'Changing `weekdays`, `startTime`, `endTime`, or `courseCode` re-checks the merged schedule: ' +
+    '`time` replaces both `startTime` and `endTime`; it cannot be combined with either.\n\n' +
+    'Changing `weekdays`, `time`, `startTime`, `endTime`, or `courseCode` re-checks the merged schedule: ' +
     'the end time must stay later than the start time (422), and the class must not conflict with any ' +
     'other class on the schedule (409).\n\n' +
     scheduleConflictDescription,
   params: ClassIdParamsSchema,
-  body: Type.Partial(Type.Object(ClassFieldsSchema, { additionalProperties: false })),
+  body: Type.Partial(Type.Object(ClassInputSchema, { additionalProperties: false })),
   response: {
     200: Type.Object(
       { class: ClassResponseSchema },

@@ -4,7 +4,15 @@ import { ErrorCode } from '../../common/errors/error-codes.js';
 import type { CampusDestinationRecord, ExternalPlacesGateway } from '../campus/campus.types.js';
 import { createOutdoorFallbackResolver } from '../campus/outdoor-fallback.js';
 import { findClassConflicts, findDuplicateClass, type ClassSchedule } from './class-conflicts.js';
-import type { ClassRecord, CreateClassInput, UpdateClassInput } from './classes.types.js';
+import { parseClockTime, parseCsulbTimeRange } from './class-times.js';
+import type {
+  ClassRecord,
+  ClassTimeRequest,
+  CreateClassInput,
+  CreateClassRequest,
+  UpdateClassInput,
+  UpdateClassRequest,
+} from './classes.types.js';
 
 /** Raised by the `classes_prevent_time_conflict` trigger (exclusion_violation). */
 const TIME_CONFLICT_SQLSTATE = '23P01';
@@ -22,6 +30,65 @@ function validateTimeOrder(startTime: string | undefined, endTime: string | unde
       message: 'End time must be later than start time.',
     });
   }
+}
+
+function invalidTime(message: string): AppError {
+  return new AppError({ code: ErrorCode.VALIDATION_ERROR, statusCode: 422, message });
+}
+
+function clockTime(value: string, field: 'startTime' | 'endTime'): string {
+  const parsed = parseClockTime(value);
+  if (parsed === null) throw invalidTime(`\`${field}\` is not a recognized time.`);
+  return parsed;
+}
+
+/**
+ * Normalizes whichever time form the client sent to 24-hour start/end.
+ * Omitted fields stay omitted, so a partial update only touches what it sent.
+ */
+function normalizeTimes(request: ClassTimeRequest): { startTime?: string; endTime?: string } {
+  if (request.time === undefined) {
+    return {
+      ...(request.startTime === undefined ? {} : { startTime: clockTime(request.startTime, 'startTime') }),
+      ...(request.endTime === undefined ? {} : { endTime: clockTime(request.endTime, 'endTime') }),
+    };
+  }
+  if (request.startTime !== undefined || request.endTime !== undefined) {
+    throw invalidTime('Send either `time` or `startTime`/`endTime`, not both.');
+  }
+  const range = parseCsulbTimeRange(request.time);
+  if (range === null) throw invalidTime('`time` is not a recognized or unambiguous time range.');
+  if (range.kind === 'unscheduled') {
+    throw invalidTime('Classes without a scheduled meeting time (NA/NA) are not supported.');
+  }
+  return { startTime: range.startTime, endTime: range.endTime };
+}
+
+function toCreateInput(request: CreateClassRequest): CreateClassInput {
+  const { startTime, endTime } = normalizeTimes(request);
+  if (startTime === undefined || endTime === undefined) {
+    throw invalidTime('Send `time`, or both `startTime` and `endTime`.');
+  }
+  return {
+    courseCode: request.courseCode,
+    courseName: request.courseName,
+    building: request.building,
+    ...(request.room === undefined ? {} : { room: request.room }),
+    weekdays: request.weekdays,
+    startTime,
+    endTime,
+  };
+}
+
+function toUpdateInput(request: UpdateClassRequest): UpdateClassInput {
+  return {
+    ...(request.courseCode === undefined ? {} : { courseCode: request.courseCode }),
+    ...(request.courseName === undefined ? {} : { courseName: request.courseName }),
+    ...(request.building === undefined ? {} : { building: request.building }),
+    ...(request.room === undefined ? {} : { room: request.room }),
+    ...(request.weekdays === undefined ? {} : { weekdays: request.weekdays }),
+    ...normalizeTimes(request),
+  };
 }
 
 function coordinatePair(building: CampusDestinationRecord): { latitude: number; longitude: number } | null {
@@ -126,7 +193,8 @@ export function createClassesService(gateway: SupabaseResources, externalPlaces:
 
   return {
     list: (accessToken: string) => gateway.listClasses(accessToken),
-    create: async (accessToken: string, userId: string, input: CreateClassInput) => {
+    create: async (accessToken: string, userId: string, request: CreateClassRequest) => {
+      const input = toCreateInput(request);
       validateTimeOrder(input.startTime, input.endTime);
       assertSchedulable(input, await gateway.listClasses(accessToken));
       const building = await resolveBuilding(gateway, externalPlaces, input.building);
@@ -139,7 +207,8 @@ export function createClassesService(gateway: SupabaseResources, externalPlaces:
         }),
       );
     },
-    update: async (accessToken: string, classId: string, input: UpdateClassInput) => {
+    update: async (accessToken: string, classId: string, request: UpdateClassRequest) => {
+      const input = toUpdateInput(request);
       validateTimeOrder(input.startTime, input.endTime);
       const touchesSchedule = input.courseCode !== undefined || input.weekdays !== undefined ||
         input.startTime !== undefined || input.endTime !== undefined;
