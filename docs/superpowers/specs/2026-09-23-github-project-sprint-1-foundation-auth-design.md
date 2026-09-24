@@ -215,6 +215,16 @@ capture demonstrates the result without private source data or credentials.
 
 ## Evidence baseline
 
+### Repository PR backlog audit
+
+The organization repositories were audited for all pull requests. The
+cross-repository backlog index is tracked in
+https://github.com/navipet-senior-project/.github/issues/9. It lists all 24
+Flutter PRs and all 47 backend PRs, preserving open, merged, and closed state
+without reopening historical work. Sprint assignment and evidence links must
+reference the original PR; the index is not a claim that every PR belongs to
+Sprint 1.
+
 The following local evidence was inspected. It supports the plan but does not
 prove remote service health, current GitHub permissions, organization
 membership, or live Supabase configuration.
