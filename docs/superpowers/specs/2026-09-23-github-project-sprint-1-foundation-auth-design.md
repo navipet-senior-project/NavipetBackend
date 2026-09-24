@@ -219,8 +219,8 @@ capture demonstrates the result without private source data or credentials.
 
 The organization repositories were audited for all pull requests. The
 cross-repository backlog index is tracked in
-https://github.com/navipet-senior-project/.github/issues/9. It lists all 24
-Flutter PRs and all 47 backend PRs, preserving open, merged, and closed state
+https://github.com/navipet-senior-project/.github/issues/9. It lists all 26
+Flutter PRs and all 48 backend PRs, preserving open, merged, and closed state
 without reopening historical work. Sprint assignment and evidence links must
 reference the original PR; the index is not a claim that every PR belongs to
 Sprint 1.
