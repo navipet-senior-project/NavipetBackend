@@ -7,8 +7,9 @@ presentation plan. The Project must show the work as planned, auditable, and
 actively being prepared for review without rewriting the history of completed
 implementation work.
 
-Sprint 1 is limited to delivery foundation and authentication. Detailed work
-for Sprint 2 and later is intentionally excluded.
+Sprint 1 is limited to delivery foundation, authentication, and the VEC Unity
+environment foundation. Detailed work for Sprint 2 and later is intentionally
+excluded.
 
 ## Project boundary
 
@@ -20,15 +21,15 @@ for Sprint 2 and later is intentionally excluded.
 the neutral home for cross-repository planning issues; production code stays
 in `NaviPetFlutter` and `NavipetBackend`.
 
-**Project goal:** Present a verified delivery foundation plus the user account
-lifecycle: registration, login, and password recovery.
+**Project goal:** Present a verified delivery foundation, the user account
+lifecycle, and the VEC building capture/import foundation needed for Unity.
 
-**Target:** 23 Fibonacci story points across six parent user stories.
+**Target:** 36 Fibonacci story points across seven parent user stories.
 
 ## Truthful presentation status
 
-Each parent issue is added to the Project with Status **In Progress** and
-starts with this exact note:
+Completed implementation parent issues are added to the Project with Status
+**In Progress** and start with this exact note:
 
 > Implementation is reported as completed. In Progress means evidence
 > validation, documentation, and Sprint Review preparation are in progress;
@@ -38,6 +39,10 @@ This status is a claim about current presentation-readiness work only. It must
 not be used to mark historical source issues, completed pull requests, builds,
 or deployments as unfinished. A parent changes to Done only after its listed
 evidence has been reviewed and linked.
+
+The Unity parent is also **In Progress**, but its issue states plainly that
+capture, assembly, and validation remain open; it must not use the completed
+implementation wording above.
 
 ## Project structure
 
@@ -49,11 +54,11 @@ Board**. Add these fields:
 | Title | Built in | Parent user-story issue title |
 | Status | Built in | Set every initial parent item to In Progress |
 | Points | Number | 5, 3, 2, 5, 3, or 5; total must be 23 |
-| Area | Single select | Delivery, Supabase, Collaboration, Authentication |
+| Area | Single select | Delivery, Supabase, Collaboration, Authentication, Unity |
 | Repository | Built in | `.github` for the planning issue; production links remain in the issue body |
 | Evidence state | Single select | Needs review, Partially verified, Verified, Blocked |
 
-The Project contains the six parent user-story issues only. Each issue holds
+The Project contains the seven parent user-story issues only. Each issue holds
 its subtasks as a Markdown task list so the presentation board stays concise
 while the delivery work remains inspectable. No Sprint 2–4 issues or
 placeholders are added now.
@@ -174,6 +179,40 @@ when I forget it.
 recovery flow, set a new password, and log in. Invalid or expired recovery
 state cannot reset a password.
 
+### 7. VEC LiDAR capture and Unity floor merge — 13 points
+
+**User story:** As a NaviPet team member, I want the VEC building captured
+floor by floor and assembled in Unity so the app has one usable, aligned
+building environment.
+
+**Project values:** Area `Unity`; Evidence state `Needs review`.
+
+**Presentation status:** This work is intentionally **In Progress**. It covers
+VEC environment capture, Unity assembly, floor alignment, and review evidence;
+completion requires the listed validation evidence.
+
+**Subtasks:**
+
+- [ ] Define the VEC scan plan: floor inventory, LiDAR-capable phone, multiset
+      capture method, naming, storage, and safety constraints.
+- [ ] Scan each VEC floor and record capture date, device, floor label, and
+      source-file checksum or equivalent provenance.
+- [ ] Clean, decimate, and normalize each floor scan while preserving enough
+      geometry for navigation and visual review.
+- [ ] Import each processed floor into Unity and apply the agreed scale,
+      orientation, origin, materials, and scene naming.
+- [ ] Align floor elevations, stairs, elevators, and shared anchors; document
+      assumptions and unresolved drift.
+- [ ] Merge the floor scenes into one VEC Unity environment and validate
+      loading, navigation, occlusion, and performance.
+- [ ] Attach safe evidence: source inventory, Unity scene/build screenshots,
+      alignment checks, and known-issue log.
+
+**Acceptance criteria:** Each floor has named source provenance; every floor
+imports at the agreed scale and coordinate origin; the floors merge into one
+navigable scene with verified vertical alignment; and a review build or scene
+capture demonstrates the result without private source data or credentials.
+
 ## Evidence baseline
 
 The following local evidence was inspected. It supports the plan but does not
@@ -217,7 +256,7 @@ not sufficient proof by itself.
 3. Create six `.github` planning issues with the exact status note, stories,
    point values, acceptance criteria, subtasks, and safe evidence links.
 4. Add the six parent issues to the Project and set each Status to In Progress.
-5. Check that the board totals 23 points and has no Sprint 2–4 items.
+5. Check that the board totals 36 points and has no Sprint 2–4 items.
 6. Re-check all descriptions for accidental secrets or misleading completion
    wording before presentation.
 
