@@ -20,3 +20,14 @@ docs/superpowers/plans/
 .agents/
 .mcp.json
 skills-lock.json
+
+# TypeScript and tooling caches
+*.tsbuildinfo
+.eslintcache
+.vitest/
+
+# Personal agent/editor settings
+.claude/settings.local.json
+
+# OS files
+Thumbs.db
