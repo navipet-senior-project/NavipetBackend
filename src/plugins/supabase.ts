@@ -123,10 +123,11 @@ export interface RecoveryIntentGateway {
   createRecoveryIntent(userId: string): Promise<void>;
 }
 
-export type OtpType = 'recovery' | 'register';
+export type OtpType = 'recovery' | 'register' | 'set';
 
 export interface VerifyOtpResult {
   tokens: LoginTokens;
+  userId: string;
 }
 
 export interface OtpVerificationGateway {
@@ -135,6 +136,10 @@ export interface OtpVerificationGateway {
 
 export interface PasswordUpdateGateway {
   updatePassword(accessToken: string, newPassword: string): Promise<void>;
+}
+
+export interface EmailChangeGateway {
+  requestEmailChange(accessToken: string, email: string): Promise<void>;
 }
 
 export type SignOutScope = 'local' | 'global';
@@ -171,6 +176,7 @@ export interface ProfileGateway {
     userId: string,
     input: UpdateProfileInput,
   ): Promise<ProfileRecord | null>;
+  syncProfileEmail(accessToken: string, userId: string, email: string): Promise<void>;
   cleanupPendingProfileAvatars(): Promise<number>;
 }
 
@@ -198,6 +204,7 @@ export interface SupabaseResources
     RecoveryIntentGateway,
     OtpVerificationGateway,
     PasswordUpdateGateway,
+    EmailChangeGateway,
     CampusPlacesGateway,
     RecentSearchGateway,
     ClassesGateway {
@@ -454,7 +461,6 @@ export function createSupabaseResources(config: Environment): SupabaseResources 
       }
       const values = {
         ...(input.displayName === undefined ? {} : { display_name: input.displayName }),
-        ...(input.email === undefined ? {} : { email: input.email }),
         ...(input.role === undefined ? {} : { role: input.role }),
         ...(avatar === undefined ? {} : { avatar_path: avatar.committedPath }),
       };
@@ -486,6 +492,22 @@ export function createSupabaseResources(config: Environment): SupabaseResources 
         role: data.role as ProfileRecord['role'],
         avatarUrl: await profileAvatarUrl(userId, data.avatar_path as string | null),
       };
+    },
+    async syncProfileEmail(accessToken, userId, email) {
+      const { data, error } = await forAccessToken(accessToken)
+        .from('profiles')
+        .update({ email })
+        .eq('id', userId)
+        .select('id')
+        .maybeSingle();
+      if (error !== null) throw error;
+      if (data === null) {
+        throw new AppError({
+          code: ErrorCode.NOT_FOUND,
+          statusCode: 404,
+          message: 'Profile not found.',
+        });
+      }
     },
     async uploadProfileAvatar(userId, contentType, data) {
       const uploadId = randomUUID();
@@ -895,10 +917,48 @@ export function createSupabaseResources(config: Environment): SupabaseResources 
       );
       if (error !== null) throw error;
     },
+    async requestEmailChange(accessToken, email) {
+      const response = await fetch(
+        new URL('/auth/v1/user', config.SUPABASE_URL).toString(),
+        {
+          method: 'PUT',
+          headers: {
+            apikey: config.SUPABASE_ANON_KEY,
+            authorization: `Bearer ${accessToken}`,
+            'content-type': 'application/json',
+          },
+          body: JSON.stringify({ email }),
+        },
+      );
+      if (!response.ok) {
+        let body: { code?: unknown; error_code?: unknown; message?: unknown; msg?: unknown } = {};
+        try {
+          body = (await response.json()) as typeof body;
+        } catch {
+          // Proxies can return an empty or non-JSON error response.
+        }
+        const error = new Error(
+          typeof body.msg === 'string'
+            ? body.msg
+            : typeof body.message === 'string'
+              ? body.message
+              : response.statusText,
+        );
+        Object.assign(error, {
+          code: typeof body.code === 'string'
+            ? body.code
+            : typeof body.error_code === 'string'
+              ? body.error_code
+              : undefined,
+          status: response.status,
+        });
+        throw error;
+      }
+    },
     async verifyOtp(email, code, type) {
       // Supabase's own OTP type enum has no 'register' — 'signup' is its
       // equivalent for a new-account confirmation code.
-      const supabaseType = type === 'register' ? 'signup' : type;
+      const supabaseType = type === 'register' ? 'signup' : type === 'set' ? 'email_change' : type;
       const { data, error } = await publicClient.auth.verifyOtp({
         email,
         token: code,
@@ -916,6 +976,7 @@ export function createSupabaseResources(config: Environment): SupabaseResources 
           accessToken: data.session.access_token,
           refreshToken: data.session.refresh_token,
         },
+        userId: data.user?.id ?? data.session.user.id,
       };
     },
     async updatePassword(accessToken, newPassword) {

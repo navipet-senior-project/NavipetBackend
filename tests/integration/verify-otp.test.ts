@@ -4,21 +4,33 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   createSupabaseResources,
   type OtpVerificationGateway,
+  type ProfileGateway,
 } from '../../src/plugins/supabase.js';
+import type { JwtVerifier } from '../../src/plugins/auth.js';
 import { buildTestApp, TEST_ENV } from '../helpers/build-test-app.js';
 
 const anyString = expect.any(String) as unknown;
 const recoveryPayload = { email: 'student@example.com', code: '123456', type: 'recovery' };
 const registerPayload = { email: 'student@example.com', code: '123456', type: 'register' };
+const setPayload = { email: 'new-email@example.com', code: '123456', type: 'set' };
+const verifiedUser = {
+  id: '11111111-1111-4111-8111-111111111111',
+  sessionPurpose: 'standard' as const,
+};
 
 function buildAppWithVerifyOtp(
   verifyOtp: ReturnType<typeof vi.fn<OtpVerificationGateway['verifyOtp']>>,
+  syncProfileEmail?: ReturnType<typeof vi.fn<ProfileGateway['syncProfileEmail']>>,
 ) {
   const supabaseResources = {
     ...createSupabaseResources(TEST_ENV),
     verifyOtp,
+    ...(syncProfileEmail === undefined ? {} : { syncProfileEmail }),
   };
-  return buildTestApp({}, { supabaseResources });
+  return buildTestApp({}, {
+    supabaseResources,
+    authVerifier: { verify: vi.fn<JwtVerifier['verify']>().mockResolvedValue(verifiedUser) },
+  });
 }
 
 describe('verify otp', () => {
@@ -33,6 +45,7 @@ describe('verify otp', () => {
       .fn<OtpVerificationGateway['verifyOtp']>()
       .mockResolvedValue({
         tokens: { accessToken: 'recovery-access-token', refreshToken: 'recovery-refresh-token' },
+        userId: verifiedUser.id,
       });
     app = await buildAppWithVerifyOtp(verifyOtp);
 
@@ -55,6 +68,7 @@ describe('verify otp', () => {
       .fn<OtpVerificationGateway['verifyOtp']>()
       .mockResolvedValue({
         tokens: { accessToken: 'register-access-token', refreshToken: 'register-refresh-token' },
+        userId: verifiedUser.id,
       });
     app = await buildAppWithVerifyOtp(verifyOtp);
 
@@ -77,6 +91,7 @@ describe('verify otp', () => {
       .fn<OtpVerificationGateway['verifyOtp']>()
       .mockResolvedValue({
         tokens: { accessToken: 'a', refreshToken: 'b' },
+        userId: verifiedUser.id,
       });
     app = await buildAppWithVerifyOtp(verifyOtp);
 
@@ -103,6 +118,45 @@ describe('verify otp', () => {
     expect(response.json()).toEqual({
       error: { code: 'INVALID_OTP', message: anyString, requestId: anyString },
     });
+  });
+
+  it('requires the current standard session to confirm an email change', async () => {
+    const verifyOtp = vi.fn<OtpVerificationGateway['verifyOtp']>();
+    app = await buildTestApp({}, {
+      supabaseResources: { ...createSupabaseResources(TEST_ENV), verifyOtp },
+    });
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/auth/verify-otp',
+      payload: setPayload,
+    });
+
+    expect(response.statusCode).toBe(401);
+    expect(verifyOtp).not.toHaveBeenCalled();
+  });
+
+  it('confirms an email change without returning new tokens and synchronizes the profile', async () => {
+    const verifyOtp = vi.fn<OtpVerificationGateway['verifyOtp']>().mockResolvedValue({
+      tokens: { accessToken: 'unused-access-token', refreshToken: 'unused-refresh-token' },
+      userId: verifiedUser.id,
+    });
+    const syncProfileEmail = vi.fn<ProfileGateway['syncProfileEmail']>().mockResolvedValue(undefined);
+    app = await buildAppWithVerifyOtp(verifyOtp, syncProfileEmail);
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/auth/verify-otp',
+      headers: { authorization: 'Bearer current-access-token' },
+      payload: setPayload,
+    });
+
+    expect(response.statusCode).toBe(204);
+    expect(response.body).toBe('');
+    expect(verifyOtp).toHaveBeenCalledWith('new-email@example.com', '123456', 'set');
+    expect(syncProfileEmail).toHaveBeenCalledWith(
+      'current-access-token', verifiedUser.id, 'new-email@example.com',
+    );
   });
 
   it('returns 502 UPSTREAM_ERROR for an unexpected Supabase failure', async () => {

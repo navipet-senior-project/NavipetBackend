@@ -6,6 +6,7 @@ import { ErrorCode } from '../../common/errors/error-codes.js';
 import type { AuthenticatedUser } from '../../plugins/auth.js';
 import {
   ForgotPasswordRouteSchema,
+  ChangeEmailRouteSchema,
   LoginRouteSchema,
   LogoutAllRouteSchema,
   LogoutRouteSchema,
@@ -368,9 +369,66 @@ const authRoutes: FastifyPluginCallbackTypebox = (fastify, _options, done) => {
 
   fastify.post('/auth/forgot-password', forgotPasswordOptions, forgotPasswordHandler);
 
+  const changeEmailHandler = async (
+    request: {
+      user: AuthenticatedUser | null;
+      accessToken: string | null;
+      body: { email: string };
+    },
+    reply: FastifyReply,
+  ): Promise<void> => {
+    const { user, accessToken } = requireAuthenticated(request);
+    if (
+      user.email !== undefined &&
+      request.body.email === user.email.trim().toLowerCase()
+    ) {
+      throw new AppError({
+        code: ErrorCode.VALIDATION_ERROR,
+        statusCode: 422,
+        message: 'New email must be different from the current email.',
+      });
+    }
+    try {
+      await fastify.supabase.requestEmailChange(accessToken, request.body.email);
+    } catch (cause) {
+      if (cause instanceof AppError) throw cause;
+      const code = (cause as { code?: string }).code;
+      if (code === 'over_email_send_rate_limit' || code === 'over_request_rate_limit') {
+        throw new AppError({
+          code: ErrorCode.RATE_LIMITED,
+          statusCode: 429,
+          message: 'Too many email-change requests. Please try again later.',
+          cause,
+        });
+      }
+      if (code === 'email_exists' || code === 'validation_failed') {
+        throw new AppError({
+          code: ErrorCode.VALIDATION_ERROR,
+          statusCode: 422,
+          message: 'The new email is invalid or already in use.',
+          cause,
+        });
+      }
+      throw new AppError({
+        code: ErrorCode.UPSTREAM_ERROR,
+        statusCode: 502,
+        message: 'Supabase is unavailable.',
+        cause,
+      });
+    }
+    reply.code(204);
+  };
+  fastify.post('/auth/change-email', {
+    preHandler: fastify.authenticate,
+    schema: ChangeEmailRouteSchema,
+    preValidation: normalizeEmailPreValidation,
+  }, changeEmailHandler);
+
   const verifyOtpHandler = async (request: {
-    body: { email: string; code: string; type: 'recovery' | 'register' };
-  }): Promise<{ access_token: string; refresh_token: string }> => {
+    body: { email: string; code: string; type: 'recovery' | 'register' | 'set' };
+    user: AuthenticatedUser | null;
+    accessToken: string | null;
+  }, reply: FastifyReply): Promise<{ access_token: string; refresh_token: string } | undefined> => {
     let result;
     try {
       result = await fastify.supabase.verifyOtp(
@@ -393,6 +451,29 @@ const authRoutes: FastifyPluginCallbackTypebox = (fastify, _options, done) => {
         message: 'The verification code is incorrect or has expired.',
       });
     }
+    if (request.body.type === 'set') {
+      const { user, accessToken } = requireAuthenticated(request);
+      if (result.userId !== user.id) {
+        throw new AppError({
+          code: ErrorCode.INVALID_OTP,
+          statusCode: 401,
+          message: 'The verification code is incorrect or has expired.',
+        });
+      }
+      try {
+        await fastify.supabase.syncProfileEmail(accessToken, user.id, request.body.email);
+      } catch (cause) {
+        if (cause instanceof AppError) throw cause;
+        throw new AppError({
+          code: ErrorCode.UPSTREAM_ERROR,
+          statusCode: 502,
+          message: 'Profile storage is unavailable.',
+          cause,
+        });
+      }
+      reply.code(204);
+      return;
+    }
     return {
       access_token: result.tokens.accessToken,
       refresh_token: result.tokens.refreshToken,
@@ -401,6 +482,10 @@ const authRoutes: FastifyPluginCallbackTypebox = (fastify, _options, done) => {
   const verifyOtpOptions = {
     schema: VerifyOtpRouteSchema,
     preValidation: normalizeEmailPreValidation,
+    preHandler: async (request: FastifyRequest, reply: FastifyReply) => {
+      const body = request.body as { type?: unknown } | undefined;
+      if (body?.type === 'set') await fastify.authenticate(request, reply);
+    },
     config: {
       rateLimit: {
         max: fastify.config.AUTH_VERIFY_OTP_RATE_LIMIT_MAX,

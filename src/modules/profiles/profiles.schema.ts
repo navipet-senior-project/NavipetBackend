@@ -49,10 +49,6 @@ export const GetProfileRouteSchema = {
 export const UpdateProfileBodySchema = Type.Object(
   {
     displayName: Type.Optional(Type.String({ minLength: 1, maxLength: 80 })),
-    email: Type.Optional(Type.String({
-      minLength: 1,
-      pattern: '^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$',
-    })),
     role: Type.Optional(ProfileRoleSchema),
     avatarUploadId: Type.Optional(Type.String({
       format: 'uuid',
@@ -144,8 +140,9 @@ export const UpdateProfileRouteSchema = {
     'profile.\n\n' +
     'Requires `Authorization: Bearer <access_token>`.\n\n' +
     'Send at least one field. Omitted fields keep their current values.\n\n' +
-    '`displayName` is trimmed and cannot be blank. `email` is trimmed ' +
-    'and lowercased.\n\n' +
+    '`displayName` is trimmed and cannot be blank. To change the email, ' +
+    'use `POST /auth/change-email`; email is deliberately not editable ' +
+    'through this endpoint.\n\n' +
     '---\n\n' +
     'To save a new avatar, first call `POST /profiles/me/avatar`, then ' +
     'send its `uploadId` here as `avatarUploadId`.\n\n' +

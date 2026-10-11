@@ -191,9 +191,6 @@ const profilesRoutes: FastifyPluginCallbackTypebox = (fastify, _options, done) =
       }
       input.displayName = displayName;
     }
-    if (request.body.email !== undefined) {
-      input.email = request.body.email.trim().toLowerCase();
-    }
     if (request.body.role !== undefined) input.role = request.body.role;
     if (request.body.avatarUploadId !== undefined) input.avatarUploadId = request.body.avatarUploadId;
 

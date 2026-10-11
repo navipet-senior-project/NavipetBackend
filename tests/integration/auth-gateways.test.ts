@@ -360,6 +360,7 @@ describe('verifyOtp gateway', () => {
     await expect(
       resources.verifyOtp('student@example.com', '123456', 'recovery'),
     ).resolves.toEqual({
+      userId: baseUser.id,
       tokens: {
         accessToken: 'recovery-access-token',
         refreshToken: 'recovery-refresh-token',
@@ -383,10 +384,34 @@ describe('verifyOtp gateway', () => {
     await expect(
       resources.verifyOtp('student@example.com', '123456', 'register'),
     ).resolves.toEqual({
+      userId: baseUser.id,
       tokens: {
         accessToken: 'register-access-token',
         refreshToken: 'register-refresh-token',
       },
+    });
+  });
+
+  it('maps the email-change flow to Supabase email_change verification', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+      jsonResponse({
+        access_token: 'set-access-token',
+        token_type: 'bearer',
+        expires_in: 3600,
+        expires_at: 2_000_000_000,
+        refresh_token: 'set-refresh-token',
+        user: baseUser,
+      }),
+    );
+    const resources = createSupabaseResources(TEST_ENV);
+
+    await resources.verifyOtp('new-email@example.com', '123456', 'set');
+
+    const [, init] = fetchSpy.mock.calls[0] as [string, RequestInit];
+    expect(JSON.parse(init.body as string)).toMatchObject({
+      email: 'new-email@example.com',
+      token: '123456',
+      type: 'email_change',
     });
   });
 
@@ -410,6 +435,23 @@ describe('verifyOtp gateway', () => {
     await expect(
       resources.verifyOtp('student@example.com', '123456', 'recovery'),
     ).rejects.toMatchObject({ code: 'over_request_rate_limit' });
+  });
+});
+
+describe('requestEmailChange gateway', () => {
+  it('starts the Supabase email-change flow using the current bearer token', async () => {
+    const fetchSpy = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(jsonResponse({ user: baseUser }));
+    const resources = createSupabaseResources(TEST_ENV);
+
+    await resources.requestEmailChange('current-access-token', 'new-email@example.com');
+
+    const [url, init] = fetchSpy.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe(`${TEST_ENV.SUPABASE_URL}/auth/v1/user`);
+    expect(init.method).toBe('PUT');
+    expect(new Headers(init.headers).get('authorization')).toBe('Bearer current-access-token');
+    expect(JSON.parse(init.body as string)).toEqual({ email: 'new-email@example.com' });
   });
 });
 
