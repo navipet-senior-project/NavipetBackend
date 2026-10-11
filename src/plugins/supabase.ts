@@ -17,6 +17,13 @@ import type {
   CampusPlacesGateway,
   PublicCampusResult,
 } from '../modules/campus/campus.types.js';
+import {
+  ACCESSIBILITY_COLUMNS,
+  patchToRow,
+  rowToPreferences,
+  type AccessibilityPreferencesRow,
+} from '../modules/accessibility/accessibility.mapping.js';
+import type { AccessibilityGateway } from '../modules/accessibility/accessibility.types.js';
 import { attachIndoorDestinationIds } from '../modules/campus/campus.service.js';
 import { mapClassRow } from '../modules/classes/classes.service.js';
 import type {
@@ -200,7 +207,8 @@ export interface SupabaseResources
     PasswordUpdateGateway,
     CampusPlacesGateway,
     RecentSearchGateway,
-    ClassesGateway {
+    ClassesGateway,
+    AccessibilityGateway {
   publicClient: SupabaseClient;
   adminClient: SupabaseClient | null;
   forAccessToken(accessToken: string): SupabaseClient;
@@ -401,6 +409,27 @@ export function createSupabaseResources(config: Environment): SupabaseResources 
         .delete()
         .gte('searched_at', '0001-01-01T00:00:00.000Z');
       if (error !== null) throw error;
+    },
+    async getAccessibilityPreferences(accessToken) {
+      const { data, error } = await forAccessToken(accessToken)
+        .from('accessibility_preferences')
+        .select(ACCESSIBILITY_COLUMNS)
+        .limit(1);
+      if (error !== null) throw error;
+      const row = (data as AccessibilityPreferencesRow[])[0];
+      return row === undefined ? null : rowToPreferences(row);
+    },
+    async updateAccessibilityPreferences(accessToken, userId, patch) {
+      const { data, error } = await forAccessToken(accessToken)
+        .from('accessibility_preferences')
+        .upsert({ user_id: userId, ...patchToRow(patch) }, { onConflict: 'user_id' })
+        .select(ACCESSIBILITY_COLUMNS);
+      if (error !== null) throw error;
+      const row = (data as AccessibilityPreferencesRow[])[0];
+      if (row === undefined) {
+        throw new Error('Accessibility preference upsert returned no row.');
+      }
+      return rowToPreferences(row);
     },
     async getProfileByUserId(accessToken): Promise<ProfileRecord | null> {
       const { data, error } = await forAccessToken(accessToken)
