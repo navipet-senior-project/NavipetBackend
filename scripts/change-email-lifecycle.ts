@@ -131,6 +131,11 @@ async function main(): Promise<void> {
       `verify-otp expected 200, got ${String(verified.statusCode)}: ${verified.body} ` +
         '(a 502 here usually means "Secure email change" is still enabled)',
     );
+    assert(
+      verified.json<{ message?: string }>().message ===
+        'Email updated. Use this email the next time you sign in.',
+      'verify-otp did not return the email-change sign-in message',
+    );
     const tokens = verified.json<{ access_token: string }>();
     pass('verify-otp returned a session for the email change');
 

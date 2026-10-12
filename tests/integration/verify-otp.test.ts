@@ -48,6 +48,7 @@ describe('verify otp', () => {
       access_token: 'recovery-access-token',
       refresh_token: 'recovery-refresh-token',
     });
+    expect(response.json()).not.toHaveProperty('message');
     expect(verifyOtp).toHaveBeenCalledWith('student@example.com', '123456', 'recovery');
   });
 
@@ -70,6 +71,7 @@ describe('verify otp', () => {
       access_token: 'register-access-token',
       refresh_token: 'register-refresh-token',
     });
+    expect(response.json()).not.toHaveProperty('message');
     expect(verifyOtp).toHaveBeenCalledWith('student@example.com', '123456', 'register');
   });
 
@@ -124,6 +126,7 @@ describe('verify otp', () => {
     expect(response.json()).toEqual({
       access_token: 'changed-access-token',
       refresh_token: 'changed-refresh-token',
+      message: 'Email updated. Use this email the next time you sign in.',
     });
     expect(verifyOtp).toHaveBeenCalledWith('new-email@example.com', '123456', 'email_change');
   });

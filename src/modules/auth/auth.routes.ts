@@ -469,7 +469,7 @@ const authRoutes: FastifyPluginCallbackTypebox = (fastify, _options, done) => {
 
   const verifyOtpHandler = async (request: {
     body: { email: string; code: string; type: 'recovery' | 'register' | 'email_change' };
-  }): Promise<{ access_token: string; refresh_token: string }> => {
+  }): Promise<{ access_token: string; refresh_token: string; message?: string }> => {
     let result;
     try {
       result = await fastify.supabase.verifyOtp(
@@ -495,6 +495,9 @@ const authRoutes: FastifyPluginCallbackTypebox = (fastify, _options, done) => {
     return {
       access_token: result.tokens.accessToken,
       refresh_token: result.tokens.refreshToken,
+      ...(request.body.type === 'email_change'
+        ? { message: 'Email updated. Use this email the next time you sign in.' }
+        : {}),
     };
   };
   const verifyOtpOptions = {

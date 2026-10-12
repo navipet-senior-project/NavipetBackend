@@ -368,6 +368,14 @@ export const VerifyOtpSessionResponseSchema = Type.Object(
   {
     access_token: Type.String({ minLength: 1 }),
     refresh_token: Type.String({ minLength: 1 }),
+    message: Type.Optional(
+      Type.String({
+        description:
+          'Present only for type: email_change. Tells the user which email ' +
+          'to use at the next sign-in.',
+        example: 'Email updated. Use this email the next time you sign in.',
+      }),
+    ),
   },
   {
     $id: 'VerifyOtpSessionResponse',
@@ -419,6 +427,8 @@ export const VerifyOtpRouteSchema = {
     '**Step 4.** The sign-in email is now the new address. Replace the ' +
     'stored tokens with the returned session so the token carries the new ' +
     'email.\n\n' +
+    '**Step 5.** Show the returned message to the user: the new address ' +
+    'is the one to sign in with from now on.\n\n' +
     '---\n\n' +
     'A wrong code and an expired code return the same 401 in every flow, ' +
     'so the response never reveals whether a code was ever valid.',
