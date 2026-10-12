@@ -21,6 +21,8 @@ export const TEST_ENV: Environment = Object.freeze({
   AUTH_FORGOT_PASSWORD_RATE_LIMIT_WINDOW: '1 hour',
   AUTH_VERIFY_OTP_RATE_LIMIT_MAX: 250,
   AUTH_VERIFY_OTP_RATE_LIMIT_WINDOW: '1 hour',
+  AUTH_CHANGE_EMAIL_RATE_LIMIT_MAX: 250,
+  AUTH_CHANGE_EMAIL_RATE_LIMIT_WINDOW: '1 hour',
   DOCS_ENABLED: false,
   SUPABASE_URL: 'https://project-ref.supabase.co',
   SUPABASE_ANON_KEY: 'test-anon-key',

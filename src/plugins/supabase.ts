@@ -130,7 +130,7 @@ export interface RecoveryIntentGateway {
   createRecoveryIntent(userId: string): Promise<void>;
 }
 
-export type OtpType = 'recovery' | 'register';
+export type OtpType = 'recovery' | 'register' | 'email_change';
 
 export interface VerifyOtpResult {
   tokens: LoginTokens;
@@ -142,6 +142,10 @@ export interface OtpVerificationGateway {
 
 export interface PasswordUpdateGateway {
   updatePassword(accessToken: string, newPassword: string): Promise<void>;
+}
+
+export interface EmailChangeGateway {
+  requestEmailChange(accessToken: string, email: string): Promise<void>;
 }
 
 export type SignOutScope = 'local' | 'global';
@@ -205,6 +209,7 @@ export interface SupabaseResources
     RecoveryIntentGateway,
     OtpVerificationGateway,
     PasswordUpdateGateway,
+    EmailChangeGateway,
     CampusPlacesGateway,
     RecentSearchGateway,
     ClassesGateway,
@@ -483,7 +488,6 @@ export function createSupabaseResources(config: Environment): SupabaseResources 
       }
       const values = {
         ...(input.displayName === undefined ? {} : { display_name: input.displayName }),
-        ...(input.email === undefined ? {} : { email: input.email }),
         ...(input.role === undefined ? {} : { role: input.role }),
         ...(avatar === undefined ? {} : { avatar_path: avatar.committedPath }),
       };
@@ -924,9 +928,48 @@ export function createSupabaseResources(config: Environment): SupabaseResources 
       );
       if (error !== null) throw error;
     },
+    async requestEmailChange(accessToken, email) {
+      const response = await fetch(
+        new URL('/auth/v1/user', config.SUPABASE_URL).toString(),
+        {
+          method: 'PUT',
+          headers: {
+            apikey: config.SUPABASE_ANON_KEY,
+            authorization: `Bearer ${accessToken}`,
+            'content-type': 'application/json',
+          },
+          body: JSON.stringify({ email }),
+        },
+      );
+      if (!response.ok) {
+        let body: { code?: unknown; error_code?: unknown; message?: unknown; msg?: unknown } = {};
+        try {
+          body = (await response.json()) as typeof body;
+        } catch {
+          // Proxies can return an empty or non-JSON error response.
+        }
+        const error = new Error(
+          typeof body.msg === 'string'
+            ? body.msg
+            : typeof body.message === 'string'
+              ? body.message
+              : response.statusText,
+        );
+        Object.assign(error, {
+          code: typeof body.code === 'string'
+            ? body.code
+            : typeof body.error_code === 'string'
+              ? body.error_code
+              : undefined,
+          status: response.status,
+        });
+        throw error;
+      }
+    },
     async verifyOtp(email, code, type) {
       // Supabase's own OTP type enum has no 'register' — 'signup' is its
-      // equivalent for a new-account confirmation code.
+      // equivalent for a new-account confirmation code. 'recovery' and
+      // 'email_change' already match Supabase's names.
       const supabaseType = type === 'register' ? 'signup' : type;
       const { data, error } = await publicClient.auth.verifyOtp({
         email,

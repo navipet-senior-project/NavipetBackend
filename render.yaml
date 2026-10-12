@@ -51,6 +51,10 @@ services:
         value: '250'
       - key: AUTH_VERIFY_OTP_RATE_LIMIT_WINDOW
         value: 1 hour
+      - key: AUTH_CHANGE_EMAIL_RATE_LIMIT_MAX
+        value: '250'
+      - key: AUTH_CHANGE_EMAIL_RATE_LIMIT_WINDOW
+        value: 1 hour
       # Publicly exposes Swagger UI at /docs/. Set to false to keep the
       # OpenAPI document private in production.
       - key: DOCS_ENABLED

@@ -10,6 +10,7 @@ import { buildTestApp, TEST_ENV } from '../helpers/build-test-app.js';
 const anyString = expect.any(String) as unknown;
 const recoveryPayload = { email: 'student@example.com', code: '123456', type: 'recovery' };
 const registerPayload = { email: 'student@example.com', code: '123456', type: 'register' };
+const emailChangePayload = { email: 'new-email@example.com', code: '123456', type: 'email_change' };
 
 function buildAppWithVerifyOtp(
   verifyOtp: ReturnType<typeof vi.fn<OtpVerificationGateway['verifyOtp']>>,
@@ -47,6 +48,7 @@ describe('verify otp', () => {
       access_token: 'recovery-access-token',
       refresh_token: 'recovery-refresh-token',
     });
+    expect(response.json()).not.toHaveProperty('message');
     expect(verifyOtp).toHaveBeenCalledWith('student@example.com', '123456', 'recovery');
   });
 
@@ -69,6 +71,7 @@ describe('verify otp', () => {
       access_token: 'register-access-token',
       refresh_token: 'register-refresh-token',
     });
+    expect(response.json()).not.toHaveProperty('message');
     expect(verifyOtp).toHaveBeenCalledWith('student@example.com', '123456', 'register');
   });
 
@@ -103,6 +106,57 @@ describe('verify otp', () => {
     expect(response.json()).toEqual({
       error: { code: 'INVALID_OTP', message: anyString, requestId: anyString },
     });
+  });
+
+  it('confirms an email change without a bearer token and returns the new session', async () => {
+    const verifyOtp = vi
+      .fn<OtpVerificationGateway['verifyOtp']>()
+      .mockResolvedValue({
+        tokens: { accessToken: 'changed-access-token', refreshToken: 'changed-refresh-token' },
+      });
+    app = await buildAppWithVerifyOtp(verifyOtp);
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/auth/verify-otp',
+      payload: { ...emailChangePayload, email: '  New-Email@Example.com ' },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({
+      access_token: 'changed-access-token',
+      refresh_token: 'changed-refresh-token',
+      message: 'Email updated. Use this email the next time you sign in.',
+    });
+    expect(verifyOtp).toHaveBeenCalledWith('new-email@example.com', '123456', 'email_change');
+  });
+
+  it('returns 401 INVALID_OTP for a wrong or expired email-change code', async () => {
+    const verifyOtp = vi.fn<OtpVerificationGateway['verifyOtp']>().mockResolvedValue(null);
+    app = await buildAppWithVerifyOtp(verifyOtp);
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/auth/verify-otp',
+      payload: emailChangePayload,
+    });
+
+    expect(response.statusCode).toBe(401);
+    expect(response.json()).toMatchObject({ error: { code: 'INVALID_OTP' } });
+  });
+
+  it('rejects the retired email-change type name', async () => {
+    const verifyOtp = vi.fn<OtpVerificationGateway['verifyOtp']>();
+    app = await buildAppWithVerifyOtp(verifyOtp);
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/auth/verify-otp',
+      payload: { ...emailChangePayload, type: 'set' },
+    });
+
+    expect(response.statusCode).toBe(422);
+    expect(verifyOtp).not.toHaveBeenCalled();
   });
 
   it('returns 502 UPSTREAM_ERROR for an unexpected Supabase failure', async () => {

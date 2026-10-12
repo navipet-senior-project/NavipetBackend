@@ -88,7 +88,6 @@ describe('profiles', () => {
       headers: { authorization: 'Bearer valid-access-token' },
       payload: {
         displayName: '  Professor Jane Doe  ',
-        email: 'Professor@Example.com',
         role: 'professor',
         avatarUploadId: '11111111-1111-4111-8111-111111111112',
       },
@@ -108,11 +107,28 @@ describe('profiles', () => {
       verifiedUser.id,
       {
         displayName: 'Professor Jane Doe',
-        email: 'professor@example.com',
         role: 'professor',
         avatarUploadId: '11111111-1111-4111-8111-111111111112',
       },
     );
+  });
+
+  it('rejects email updates so authentication remains the email authority', async () => {
+    const updateProfile = vi.fn();
+    app = await buildTestApp({}, {
+      supabaseResources: { ...createSupabaseResources(TEST_ENV), updateProfile },
+      authVerifier: { verify: vi.fn<JwtVerifier['verify']>().mockResolvedValue(verifiedUser) },
+    });
+
+    const response = await app.inject({
+      method: 'PATCH',
+      url: '/profiles/me',
+      headers: { authorization: 'Bearer valid-access-token' },
+      payload: { email: 'new-email@example.com' },
+    });
+
+    expect(response.statusCode).toBe(422);
+    expect(updateProfile).not.toHaveBeenCalled();
   });
 
   it('rejects unexpected profile fields', async () => {

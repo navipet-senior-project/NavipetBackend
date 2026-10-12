@@ -18,7 +18,6 @@ export interface ProfileRecord {
 
 export interface UpdateProfileInput {
   displayName?: string;
-  email?: string;
   role?: ProfileRole;
   avatarUploadId?: string;
 }

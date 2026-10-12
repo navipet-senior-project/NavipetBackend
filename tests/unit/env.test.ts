@@ -112,6 +112,8 @@ describe('parseEnv', () => {
     expect(env.AUTH_FORGOT_PASSWORD_RATE_LIMIT_WINDOW).toBe('1 hour');
     expect(env.AUTH_VERIFY_OTP_RATE_LIMIT_MAX).toBe(250);
     expect(env.AUTH_VERIFY_OTP_RATE_LIMIT_WINDOW).toBe('1 hour');
+    expect(env.AUTH_CHANGE_EMAIL_RATE_LIMIT_MAX).toBe(250);
+    expect(env.AUTH_CHANGE_EMAIL_RATE_LIMIT_WINDOW).toBe('1 hour');
   });
 
   it('rejects an invalid auth rate-limit window', () => {
@@ -131,6 +133,12 @@ describe('parseEnv', () => {
       parseEnv({
         ...required,
         AUTH_VERIFY_OTP_RATE_LIMIT_WINDOW: 'not-a-window',
+      }),
+    ).toThrow('Invalid environment configuration');
+    expect(() =>
+      parseEnv({
+        ...required,
+        AUTH_CHANGE_EMAIL_RATE_LIMIT_WINDOW: 'not-a-window',
       }),
     ).toThrow('Invalid environment configuration');
   });

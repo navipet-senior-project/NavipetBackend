@@ -11,3 +11,8 @@ export const DEFAULT_AUTH_FORGOT_PASSWORD_RATE_LIMIT_MAX = 250;
 export const DEFAULT_AUTH_FORGOT_PASSWORD_RATE_LIMIT_WINDOW = '1 hour';
 export const DEFAULT_AUTH_VERIFY_OTP_RATE_LIMIT_MAX = 250;
 export const DEFAULT_AUTH_VERIFY_OTP_RATE_LIMIT_WINDOW = '1 hour';
+export const DEFAULT_AUTH_CHANGE_EMAIL_RATE_LIMIT_MAX = 250;
+export const DEFAULT_AUTH_CHANGE_EMAIL_RATE_LIMIT_WINDOW = '1 hour';
+// How recently the user must have signed in with their password before
+// POST /auth/change-email accepts the request.
+export const AUTH_CHANGE_EMAIL_REAUTH_MAX_AGE_SECONDS = 600;

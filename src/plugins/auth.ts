@@ -49,6 +49,8 @@ export interface AuthenticatedUser {
   id: string;
   email?: string;
   authenticationMethods?: string[];
+  /** Epoch seconds of the session's most recent password sign-in, if any. */
+  passwordAuthenticatedAt?: number;
   sessionPurpose?: 'standard' | 'recovery' | 'unclassified_otp';
 }
 
@@ -79,6 +81,9 @@ export class SupabaseJwtVerifier implements JwtVerifier {
       const claims = ClaimsValidator.Parse(untrustedClaims);
       const audiences = Array.isArray(claims.aud) ? claims.aud : [claims.aud];
       const nowSeconds = Math.floor(this.now() / 1000);
+      const passwordTimestamps = (claims.amr ?? [])
+        .filter((entry) => entry.method === 'password')
+        .map((entry) => entry.timestamp);
 
       if (
         claims.iss !== this.issuer ||
@@ -96,6 +101,9 @@ export class SupabaseJwtVerifier implements JwtVerifier {
           : {
               authenticationMethods: claims.amr.map((entry) => entry.method),
             }),
+        ...(passwordTimestamps.length === 0
+          ? {}
+          : { passwordAuthenticatedAt: Math.max(...passwordTimestamps) }),
         ...(claims.session_purpose === undefined
           ? {}
           : { sessionPurpose: claims.session_purpose }),
