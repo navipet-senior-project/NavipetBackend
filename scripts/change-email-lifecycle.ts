@@ -176,7 +176,7 @@ async function main(): Promise<void> {
     assert(
       profile.data?.email === newEmail,
       `profiles.email is ${String(profile.data?.email)}, expected ${newEmail} ` +
-        '(apply supabase/migrations/20261012000000_sync_profile_email.sql)',
+        '(apply supabase/migrations/20261012192109_sync_profile_email.sql)',
     );
     pass('profiles.email followed the Auth email');
   } finally {
