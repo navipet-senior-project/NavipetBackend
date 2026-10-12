@@ -4,33 +4,22 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   createSupabaseResources,
   type OtpVerificationGateway,
-  type ProfileGateway,
 } from '../../src/plugins/supabase.js';
-import type { JwtVerifier } from '../../src/plugins/auth.js';
 import { buildTestApp, TEST_ENV } from '../helpers/build-test-app.js';
 
 const anyString = expect.any(String) as unknown;
 const recoveryPayload = { email: 'student@example.com', code: '123456', type: 'recovery' };
 const registerPayload = { email: 'student@example.com', code: '123456', type: 'register' };
-const setPayload = { email: 'new-email@example.com', code: '123456', type: 'set' };
-const verifiedUser = {
-  id: '11111111-1111-4111-8111-111111111111',
-  sessionPurpose: 'standard' as const,
-};
+const emailChangePayload = { email: 'new-email@example.com', code: '123456', type: 'email_change' };
 
 function buildAppWithVerifyOtp(
   verifyOtp: ReturnType<typeof vi.fn<OtpVerificationGateway['verifyOtp']>>,
-  syncProfileEmail?: ReturnType<typeof vi.fn<ProfileGateway['syncProfileEmail']>>,
 ) {
   const supabaseResources = {
     ...createSupabaseResources(TEST_ENV),
     verifyOtp,
-    ...(syncProfileEmail === undefined ? {} : { syncProfileEmail }),
   };
-  return buildTestApp({}, {
-    supabaseResources,
-    authVerifier: { verify: vi.fn<JwtVerifier['verify']>().mockResolvedValue(verifiedUser) },
-  });
+  return buildTestApp({}, { supabaseResources });
 }
 
 describe('verify otp', () => {
@@ -45,7 +34,6 @@ describe('verify otp', () => {
       .fn<OtpVerificationGateway['verifyOtp']>()
       .mockResolvedValue({
         tokens: { accessToken: 'recovery-access-token', refreshToken: 'recovery-refresh-token' },
-        userId: verifiedUser.id,
       });
     app = await buildAppWithVerifyOtp(verifyOtp);
 
@@ -68,7 +56,6 @@ describe('verify otp', () => {
       .fn<OtpVerificationGateway['verifyOtp']>()
       .mockResolvedValue({
         tokens: { accessToken: 'register-access-token', refreshToken: 'register-refresh-token' },
-        userId: verifiedUser.id,
       });
     app = await buildAppWithVerifyOtp(verifyOtp);
 
@@ -91,7 +78,6 @@ describe('verify otp', () => {
       .fn<OtpVerificationGateway['verifyOtp']>()
       .mockResolvedValue({
         tokens: { accessToken: 'a', refreshToken: 'b' },
-        userId: verifiedUser.id,
       });
     app = await buildAppWithVerifyOtp(verifyOtp);
 
@@ -120,43 +106,54 @@ describe('verify otp', () => {
     });
   });
 
-  it('requires the current standard session to confirm an email change', async () => {
-    const verifyOtp = vi.fn<OtpVerificationGateway['verifyOtp']>();
-    app = await buildTestApp({}, {
-      supabaseResources: { ...createSupabaseResources(TEST_ENV), verifyOtp },
-    });
+  it('confirms an email change without a bearer token and returns the new session', async () => {
+    const verifyOtp = vi
+      .fn<OtpVerificationGateway['verifyOtp']>()
+      .mockResolvedValue({
+        tokens: { accessToken: 'changed-access-token', refreshToken: 'changed-refresh-token' },
+      });
+    app = await buildAppWithVerifyOtp(verifyOtp);
 
     const response = await app.inject({
       method: 'POST',
       url: '/auth/verify-otp',
-      payload: setPayload,
+      payload: { ...emailChangePayload, email: '  New-Email@Example.com ' },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({
+      access_token: 'changed-access-token',
+      refresh_token: 'changed-refresh-token',
+    });
+    expect(verifyOtp).toHaveBeenCalledWith('new-email@example.com', '123456', 'email_change');
+  });
+
+  it('returns 401 INVALID_OTP for a wrong or expired email-change code', async () => {
+    const verifyOtp = vi.fn<OtpVerificationGateway['verifyOtp']>().mockResolvedValue(null);
+    app = await buildAppWithVerifyOtp(verifyOtp);
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/auth/verify-otp',
+      payload: emailChangePayload,
     });
 
     expect(response.statusCode).toBe(401);
-    expect(verifyOtp).not.toHaveBeenCalled();
+    expect(response.json()).toMatchObject({ error: { code: 'INVALID_OTP' } });
   });
 
-  it('confirms an email change without returning new tokens and synchronizes the profile', async () => {
-    const verifyOtp = vi.fn<OtpVerificationGateway['verifyOtp']>().mockResolvedValue({
-      tokens: { accessToken: 'unused-access-token', refreshToken: 'unused-refresh-token' },
-      userId: verifiedUser.id,
-    });
-    const syncProfileEmail = vi.fn<ProfileGateway['syncProfileEmail']>().mockResolvedValue(undefined);
-    app = await buildAppWithVerifyOtp(verifyOtp, syncProfileEmail);
+  it('rejects the retired email-change type name', async () => {
+    const verifyOtp = vi.fn<OtpVerificationGateway['verifyOtp']>();
+    app = await buildAppWithVerifyOtp(verifyOtp);
 
     const response = await app.inject({
       method: 'POST',
       url: '/auth/verify-otp',
-      headers: { authorization: 'Bearer current-access-token' },
-      payload: setPayload,
+      payload: { ...emailChangePayload, type: 'set' },
     });
 
-    expect(response.statusCode).toBe(204);
-    expect(response.body).toBe('');
-    expect(verifyOtp).toHaveBeenCalledWith('new-email@example.com', '123456', 'set');
-    expect(syncProfileEmail).toHaveBeenCalledWith(
-      'current-access-token', verifiedUser.id, 'new-email@example.com',
-    );
+    expect(response.statusCode).toBe(422);
+    expect(verifyOtp).not.toHaveBeenCalled();
   });
 
   it('returns 502 UPSTREAM_ERROR for an unexpected Supabase failure', async () => {

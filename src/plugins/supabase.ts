@@ -123,11 +123,10 @@ export interface RecoveryIntentGateway {
   createRecoveryIntent(userId: string): Promise<void>;
 }
 
-export type OtpType = 'recovery' | 'register' | 'set';
+export type OtpType = 'recovery' | 'register' | 'email_change';
 
 export interface VerifyOtpResult {
   tokens: LoginTokens;
-  userId: string;
 }
 
 export interface OtpVerificationGateway {
@@ -176,7 +175,6 @@ export interface ProfileGateway {
     userId: string,
     input: UpdateProfileInput,
   ): Promise<ProfileRecord | null>;
-  syncProfileEmail(accessToken: string, userId: string, email: string): Promise<void>;
   cleanupPendingProfileAvatars(): Promise<number>;
 }
 
@@ -492,22 +490,6 @@ export function createSupabaseResources(config: Environment): SupabaseResources 
         role: data.role as ProfileRecord['role'],
         avatarUrl: await profileAvatarUrl(userId, data.avatar_path as string | null),
       };
-    },
-    async syncProfileEmail(accessToken, userId, email) {
-      const { data, error } = await forAccessToken(accessToken)
-        .from('profiles')
-        .update({ email })
-        .eq('id', userId)
-        .select('id')
-        .maybeSingle();
-      if (error !== null) throw error;
-      if (data === null) {
-        throw new AppError({
-          code: ErrorCode.NOT_FOUND,
-          statusCode: 404,
-          message: 'Profile not found.',
-        });
-      }
     },
     async uploadProfileAvatar(userId, contentType, data) {
       const uploadId = randomUUID();
@@ -957,8 +939,9 @@ export function createSupabaseResources(config: Environment): SupabaseResources 
     },
     async verifyOtp(email, code, type) {
       // Supabase's own OTP type enum has no 'register' — 'signup' is its
-      // equivalent for a new-account confirmation code.
-      const supabaseType = type === 'register' ? 'signup' : type === 'set' ? 'email_change' : type;
+      // equivalent for a new-account confirmation code. 'recovery' and
+      // 'email_change' already match Supabase's names.
+      const supabaseType = type === 'register' ? 'signup' : type;
       const { data, error } = await publicClient.auth.verifyOtp({
         email,
         token: code,
@@ -976,7 +959,6 @@ export function createSupabaseResources(config: Environment): SupabaseResources 
           accessToken: data.session.access_token,
           refreshToken: data.session.refresh_token,
         },
-        userId: data.user?.id ?? data.session.user.id,
       };
     },
     async updatePassword(accessToken, newPassword) {

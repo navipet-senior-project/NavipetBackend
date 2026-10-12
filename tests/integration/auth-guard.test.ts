@@ -220,6 +220,28 @@ describe('SupabaseJwtVerifier', () => {
     });
   });
 
+  it('reports the most recent password sign-in time', async () => {
+    const verifier = new SupabaseJwtVerifier(
+      {
+        getClaims: vi.fn().mockResolvedValue({
+          ...validClaims,
+          amr: [
+            { method: 'password', timestamp: 1_899_999_000 },
+            { method: 'otp', timestamp: 1_899_999_999 },
+            { method: 'password', timestamp: 1_899_999_500 },
+          ],
+        }),
+      },
+      TEST_ENV.SUPABASE_JWT_ISSUER,
+      TEST_ENV.SUPABASE_JWT_AUDIENCE,
+      () => 1_900_000_000_000,
+    );
+
+    await expect(verifier.verify('token')).resolves.toMatchObject({
+      passwordAuthenticatedAt: 1_899_999_500,
+    });
+  });
+
   it('accepts anonymous claims with a valid array audience', async () => {
     const anonymousClaims = {
       sub: '44444444-4444-4444-8444-444444444444',

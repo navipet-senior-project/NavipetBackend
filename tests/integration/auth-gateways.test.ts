@@ -360,7 +360,6 @@ describe('verifyOtp gateway', () => {
     await expect(
       resources.verifyOtp('student@example.com', '123456', 'recovery'),
     ).resolves.toEqual({
-      userId: baseUser.id,
       tokens: {
         accessToken: 'recovery-access-token',
         refreshToken: 'recovery-refresh-token',
@@ -384,7 +383,6 @@ describe('verifyOtp gateway', () => {
     await expect(
       resources.verifyOtp('student@example.com', '123456', 'register'),
     ).resolves.toEqual({
-      userId: baseUser.id,
       tokens: {
         accessToken: 'register-access-token',
         refreshToken: 'register-refresh-token',
@@ -405,7 +403,11 @@ describe('verifyOtp gateway', () => {
     );
     const resources = createSupabaseResources(TEST_ENV);
 
-    await resources.verifyOtp('new-email@example.com', '123456', 'set');
+    await expect(
+      resources.verifyOtp('new-email@example.com', '123456', 'email_change'),
+    ).resolves.toEqual({
+      tokens: { accessToken: 'set-access-token', refreshToken: 'set-refresh-token' },
+    });
 
     const [, init] = fetchSpy.mock.calls[0] as [string, RequestInit];
     expect(JSON.parse(init.body as string)).toMatchObject({

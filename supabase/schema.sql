@@ -80,6 +80,28 @@ create trigger on_auth_user_created
   after insert on auth.users
   for each row execute procedure public.handle_new_user();
 
+-- Supabase Auth is the authority for a user's email; mirror every change into
+-- the profile so the two cannot drift apart.
+create or replace function public.handle_user_email_change()
+returns trigger
+language plpgsql
+security definer set search_path = ''
+as $$
+begin
+  update public.profiles
+  set email = new.email
+  where id = new.id;
+  return new;
+end;
+$$;
+
+drop trigger if exists on_auth_user_email_changed on auth.users;
+create trigger on_auth_user_email_changed
+  after update of email on auth.users
+  for each row
+  when (old.email is distinct from new.email)
+  execute procedure public.handle_user_email_change();
+
 create or replace function public.set_updated_at()
 returns trigger
 language plpgsql

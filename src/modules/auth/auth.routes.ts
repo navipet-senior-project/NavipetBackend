@@ -3,10 +3,11 @@ import type { FastifyReply, FastifyRequest } from 'fastify';
 
 import { AppError } from '../../common/errors/app-error.js';
 import { ErrorCode } from '../../common/errors/error-codes.js';
+import { AUTH_CHANGE_EMAIL_REAUTH_MAX_AGE_SECONDS } from '../../config/constants.js';
 import type { AuthenticatedUser } from '../../plugins/auth.js';
 import {
-  ForgotPasswordRouteSchema,
   ChangeEmailRouteSchema,
+  ForgotPasswordRouteSchema,
   LoginRouteSchema,
   LogoutAllRouteSchema,
   LogoutRouteSchema,
@@ -16,6 +17,11 @@ import {
   ResetPasswordRouteSchema,
   VerifyOtpRouteSchema,
 } from './auth.schema.js';
+
+function supabaseErrorCode(cause: unknown): string | undefined {
+  if (typeof cause !== 'object' || cause === null || !('code' in cause)) return undefined;
+  return typeof cause.code === 'string' ? cause.code : undefined;
+}
 
 const authRoutes: FastifyPluginCallbackTypebox = (fastify, _options, done) => {
   const normalizeEmailPreValidation = (request: FastifyRequest): Promise<void> => {
@@ -376,8 +382,24 @@ const authRoutes: FastifyPluginCallbackTypebox = (fastify, _options, done) => {
       body: { email: string };
     },
     reply: FastifyReply,
-  ): Promise<void> => {
+  ): Promise<{ status: 'verification_required' }> => {
     const { user, accessToken } = requireAuthenticated(request);
+    // A stolen access token alone must not be enough to move the account to
+    // another address, so the session needs a recent password sign-in.
+    const passwordAgeSeconds =
+      user.passwordAuthenticatedAt === undefined
+        ? undefined
+        : Math.floor(Date.now() / 1000) - user.passwordAuthenticatedAt;
+    if (
+      passwordAgeSeconds === undefined ||
+      passwordAgeSeconds > AUTH_CHANGE_EMAIL_REAUTH_MAX_AGE_SECONDS
+    ) {
+      throw new AppError({
+        code: ErrorCode.REAUTH_REQUIRED,
+        statusCode: 401,
+        message: 'Sign in again with your password before changing your email.',
+      });
+    }
     if (
       user.email !== undefined &&
       request.body.email === user.email.trim().toLowerCase()
@@ -392,7 +414,7 @@ const authRoutes: FastifyPluginCallbackTypebox = (fastify, _options, done) => {
       await fastify.supabase.requestEmailChange(accessToken, request.body.email);
     } catch (cause) {
       if (cause instanceof AppError) throw cause;
-      const code = (cause as { code?: string }).code;
+      const code = supabaseErrorCode(cause);
       if (code === 'over_email_send_rate_limit' || code === 'over_request_rate_limit') {
         throw new AppError({
           code: ErrorCode.RATE_LIMITED,
@@ -401,34 +423,53 @@ const authRoutes: FastifyPluginCallbackTypebox = (fastify, _options, done) => {
           cause,
         });
       }
-      if (code === 'email_exists' || code === 'validation_failed') {
+      if (code === 'validation_failed' || code === 'email_address_invalid') {
         throw new AppError({
           code: ErrorCode.VALIDATION_ERROR,
           statusCode: 422,
-          message: 'The new email is invalid or already in use.',
+          message: 'The new email is invalid.',
           cause,
         });
       }
-      throw new AppError({
-        code: ErrorCode.UPSTREAM_ERROR,
-        statusCode: 502,
-        message: 'Supabase is unavailable.',
-        cause,
-      });
+      if (code === 'session_not_found' || code === 'bad_jwt') {
+        throw new AppError({
+          code: ErrorCode.INVALID_ACCESS_TOKEN,
+          statusCode: 401,
+          message: 'Authentication required',
+          cause,
+        });
+      }
+      // An address that already belongs to another account answers exactly
+      // like a fresh one, so this route cannot be used to probe for accounts.
+      if (code !== 'email_exists') {
+        throw new AppError({
+          code: ErrorCode.UPSTREAM_ERROR,
+          statusCode: 502,
+          message: 'Supabase is unavailable.',
+          cause,
+        });
+      }
     }
-    reply.code(204);
+    reply.code(202);
+    return { status: 'verification_required' };
   };
-  fastify.post('/auth/change-email', {
+  const changeEmailOptions = {
     preHandler: fastify.authenticate,
     schema: ChangeEmailRouteSchema,
     preValidation: normalizeEmailPreValidation,
-  }, changeEmailHandler);
+    config: {
+      rateLimit: {
+        max: fastify.config.AUTH_CHANGE_EMAIL_RATE_LIMIT_MAX,
+        timeWindow: fastify.config.AUTH_CHANGE_EMAIL_RATE_LIMIT_WINDOW,
+      },
+    },
+  };
+
+  fastify.post('/auth/change-email', changeEmailOptions, changeEmailHandler);
 
   const verifyOtpHandler = async (request: {
-    body: { email: string; code: string; type: 'recovery' | 'register' | 'set' };
-    user: AuthenticatedUser | null;
-    accessToken: string | null;
-  }, reply: FastifyReply): Promise<{ access_token: string; refresh_token: string } | undefined> => {
+    body: { email: string; code: string; type: 'recovery' | 'register' | 'email_change' };
+  }): Promise<{ access_token: string; refresh_token: string }> => {
     let result;
     try {
       result = await fastify.supabase.verifyOtp(
@@ -451,29 +492,6 @@ const authRoutes: FastifyPluginCallbackTypebox = (fastify, _options, done) => {
         message: 'The verification code is incorrect or has expired.',
       });
     }
-    if (request.body.type === 'set') {
-      const { user, accessToken } = requireAuthenticated(request);
-      if (result.userId !== user.id) {
-        throw new AppError({
-          code: ErrorCode.INVALID_OTP,
-          statusCode: 401,
-          message: 'The verification code is incorrect or has expired.',
-        });
-      }
-      try {
-        await fastify.supabase.syncProfileEmail(accessToken, user.id, request.body.email);
-      } catch (cause) {
-        if (cause instanceof AppError) throw cause;
-        throw new AppError({
-          code: ErrorCode.UPSTREAM_ERROR,
-          statusCode: 502,
-          message: 'Profile storage is unavailable.',
-          cause,
-        });
-      }
-      reply.code(204);
-      return;
-    }
     return {
       access_token: result.tokens.accessToken,
       refresh_token: result.tokens.refreshToken,
@@ -482,10 +500,6 @@ const authRoutes: FastifyPluginCallbackTypebox = (fastify, _options, done) => {
   const verifyOtpOptions = {
     schema: VerifyOtpRouteSchema,
     preValidation: normalizeEmailPreValidation,
-    preHandler: async (request: FastifyRequest, reply: FastifyReply) => {
-      const body = request.body as { type?: unknown } | undefined;
-      if (body?.type === 'set') await fastify.authenticate(request, reply);
-    },
     config: {
       rateLimit: {
         max: fastify.config.AUTH_VERIFY_OTP_RATE_LIMIT_MAX,

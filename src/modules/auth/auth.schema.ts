@@ -332,12 +332,13 @@ export const VerifyOtpBodySchema = Type.Object(
     type: Type.Union([
       Type.Literal('recovery'),
       Type.Literal('register'),
-      Type.Literal('set'),
+      Type.Literal('email_change'),
     ], {
       description:
         "'recovery' verifies a password reset code (from " +
         "/auth/forgot-password); 'register' verifies an email confirmation " +
-        'code (from /auth/register).',
+        "code (from /auth/register); 'email_change' verifies the code sent " +
+        'to a new address (from /auth/change-email).',
     }),
   },
   {
@@ -353,10 +354,11 @@ export const VerifyOtpBodySchema = Type.Object(
         description: 'Code sent by POST /auth/register.',
         value: { email: 'student@example.com', code: '123456', type: 'register' },
       },
-      set: {
-        summary: 'Confirm email change (type: set)',
-        description: 'Code sent by POST /auth/change-email. Requires a bearer token.',
-        value: { email: 'new-email@example.com', code: '123456', type: 'set' },
+      email_change: {
+        summary: 'Confirm email change (type: email_change)',
+        description:
+          'Code sent to the new address by POST /auth/change-email. `email` is the new address.',
+        value: { email: 'new-email@example.com', code: '123456', type: 'email_change' },
       },
     },
   },
@@ -374,7 +376,9 @@ export const VerifyOtpSessionResponseSchema = Type.Object(
       'short-lived recovery session — send the access_token as a bearer ' +
       'credential to POST /auth/reset-password to set a new password. For ' +
       'type: register this is a normal login session — the account is now ' +
-      'confirmed and signed in.',
+      'confirmed and signed in. For type: email_change this is a normal ' +
+      'login session whose email claim is the new address — replace the ' +
+      'stored tokens with it.',
   },
 );
 
@@ -384,9 +388,8 @@ export const VerifyOtpRouteSchema = {
   description:
     'Confirms an emailed 6-digit code and returns a session. One ' +
     'endpoint serves three flows, selected by `type`.\n\n' +
-    'The `recovery` and `register` flows are public. The `set` flow requires ' +
-    'the current standard-session bearer token. Use the "Examples" dropdown ' +
-    'to load a sample payload.\n\n' +
+    'Public — no bearer token is needed. Use the "Examples" dropdown on ' +
+    'the request body below to load a sample payload for any flow.\n\n' +
     '---\n\n' +
     '### Password reset — `type: "recovery"`\n\n' +
     '**Step 1.** `POST /auth/forgot-password` with `{ "email" }`.\n\n' +
@@ -407,21 +410,21 @@ export const VerifyOtpRouteSchema = {
     '**Step 4.** The account is now confirmed and the returned tokens are ' +
     'a normal session. No separate `POST /auth/login` call is needed.\n\n' +
     '---\n\n' +
-    '### Confirm an email change — `type: "set"`\n\n' +
-    '**Step 1.** `POST /auth/change-email` with `{ "email" }` and the ' +
+    '### Confirm an email change — `type: "email_change"`\n\n' +
+    '**Step 1.** `POST /auth/change-email` with the new address and the ' +
     'current bearer token.\n\n' +
     '**Step 2.** Read the 6-digit code sent to the new address.\n\n' +
-    '**Step 3.** Call this endpoint with `{ "email", "code", "type": ' +
-    '"set" }` and the same bearer token.\n\n' +
-    '**Step 4.** The sign-in and displayed email change immediately. This ' +
-    'returns no tokens because the existing session remains in use.\n\n' +
+    '**Step 3.** Call this endpoint with the new address as `email`, the ' +
+    'code, and `"type": "email_change"`.\n\n' +
+    '**Step 4.** The sign-in email is now the new address. Replace the ' +
+    'stored tokens with the returned session so the token carries the new ' +
+    'email.\n\n' +
     '---\n\n' +
-    'A wrong code and an expired code return the same 401 in both flows, ' +
+    'A wrong code and an expired code return the same 401 in every flow, ' +
     'so the response never reveals whether a code was ever valid.',
   body: VerifyOtpBodySchema,
   response: {
     200: VerifyOtpSessionResponseSchema,
-    204: { description: 'Email change confirmed. No response body.' },
     400: ErrorResponseSchema('Malformed JSON body.'),
     401: ErrorResponseSchema(
       'The code is missing, incorrect, or expired. The same response is ' +
@@ -444,26 +447,52 @@ export const ChangeEmailBodySchema = Type.Object(
   { additionalProperties: false },
 );
 
+export const ChangeEmailResponseSchema = Type.Object(
+  { status: Type.Literal('verification_required') },
+  {
+    $id: 'ChangeEmailResponse',
+    description:
+      'The request was accepted. If the address can be used, a 6-digit ' +
+      'code is on its way to it.',
+  },
+);
+
+// POST /auth/change-email
+//   202 accepted — also returned when the address belongs to another account
+//   400 malformed JSON (automatic)
+//   401 INVALID_ACCESS_TOKEN — no/invalid/expired/non-standard bearer token
+//   401 REAUTH_REQUIRED — no password sign-in on this session in the last 10 min
+//   422 malformed email, or same as the current email
+//   429 route limit, or Supabase's own email send limit
+//   502 Supabase failed unexpectedly
 export const ChangeEmailRouteSchema = {
   tags: ['Authentication'],
   summary: 'Send a confirmation code to change the sign-in email',
   description:
     'Starts an email-address change for the authenticated user.\n\n' +
-    'Requires `Authorization: Bearer <access_token>` from a normal login ' +
-    'session. The email is trimmed and lowercased before it is sent to ' +
-    'Supabase.\n\n' +
+    'Requires `Authorization: Bearer <access_token>` from a session that ' +
+    'signed in with a password in the last 10 minutes.\n\n' +
+    'An older session gets a 401 with code `REAUTH_REQUIRED`. Call ' +
+    '`POST /auth/login` again and retry with the new token.\n\n' +
     '---\n\n' +
-    'Next step: submit the code sent to the new email through ' +
-    '`POST /auth/verify-otp` with `type: "set"` and the same bearer token. ' +
-    'Confirming that code immediately changes both the sign-in and displayed email.',
+    'The email is trimmed and lowercased. A 6-digit code is sent to the new ' +
+    'address only.\n\n' +
+    'The response is the same 202 whether or not the address already ' +
+    'belongs to another account, so it cannot be used to look up accounts.\n\n' +
+    '---\n\n' +
+    'Next step: submit the code through `POST /auth/verify-otp` with the ' +
+    'new address as `email` and `type: "email_change"`.',
   security: [{ bearerAuth: [] }],
   body: ChangeEmailBodySchema,
   response: {
-    204: { description: 'Confirmation code sent. No response body.' },
+    202: ChangeEmailResponseSchema,
     400: ErrorResponseSchema('Malformed JSON body.'),
-    401: ErrorResponseSchema('Access token is missing, invalid, or expired.'),
+    401: ErrorResponseSchema(
+      'Access token is missing, invalid, or expired (`INVALID_ACCESS_TOKEN`), ' +
+        'or the session has no recent password sign-in (`REAUTH_REQUIRED`).',
+    ),
     422: ErrorResponseSchema(
-      'The new email is invalid, already in use, or matches the current email.',
+      'The new email is malformed or matches the current email.',
     ),
     429: ErrorResponseSchema('Too many email-change requests.'),
     502: ErrorResponseSchema('Supabase is unavailable.'),
