@@ -10,8 +10,9 @@
  * It proves what mocked integration tests cannot: a real password login
  * satisfies the reauthentication check, Supabase returns a standard session
  * for an email_change code (which requires "Secure email change" to be OFF in
- * Authentication > Sign In / Providers > Email), and the database trigger
- * keeps profiles.email equal to the Auth email.
+ * Authentication > Sign In / Providers > Email), the database trigger keeps
+ * profiles.email equal to the Auth email, and a signed-in user cannot write
+ * profiles.email through the Supabase REST API.
  *
  * No email is sent: the code comes from generateLink, so the run needs no
  * inbox and does not depend on SMTP being configured.
@@ -179,6 +180,37 @@ async function main(): Promise<void> {
         '(apply supabase/migrations/20261012192109_sync_profile_email.sql)',
     );
     pass('profiles.email followed the Auth email');
+
+    // The trigger is the only writer of profiles.email. A signed-in user
+    // talking to the Supabase REST API directly must not be able to change it.
+    const asUser = createClient(env.SUPABASE_URL, env.SUPABASE_ANON_KEY, {
+      auth: {
+        autoRefreshToken: false,
+        detectSessionInUrl: false,
+        persistSession: false,
+      },
+      global: { headers: { Authorization: `Bearer ${tokens.access_token}` } },
+    });
+    const forged = await asUser
+      .from('profiles')
+      .update({ email: `navipet-email-forged-${stamp}@example.com` })
+      .eq('id', userId);
+    assert(
+      forged.error?.code === '42501',
+      `direct profiles.email write expected Postgres 42501, got ${JSON.stringify(forged.error)} ` +
+        '(apply the restrict_profile_email_writes migration)',
+    );
+    pass('a signed-in user cannot write profiles.email directly');
+
+    const renamed = await asUser
+      .from('profiles')
+      .update({ display_name: 'Lifecycle Check' })
+      .eq('id', userId);
+    assert(
+      renamed.error === null,
+      `display_name update expected to succeed, got ${JSON.stringify(renamed.error)}`,
+    );
+    pass('a signed-in user can still update their own display name');
   } finally {
     await app.close();
     const deleted = await admin.auth.admin.deleteUser(userId);
