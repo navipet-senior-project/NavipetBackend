@@ -52,6 +52,7 @@ export async function buildApp(
             'req.headers.cookie',
             'SUPABASE_ANON_KEY',
             'SUPABASE_SERVICE_ROLE_KEY',
+            'RESEND_API_KEY',
             'MULTISET_API_KEY',
             'MAPBOX_ACCESS_TOKEN',
           ],

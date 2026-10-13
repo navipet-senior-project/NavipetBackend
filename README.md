@@ -109,6 +109,14 @@ Ordinary API routes require `standard`, while only `POST /auth/reset-password`
 accepts `recovery`. The server rejects refresh for non-standard sessions and
 revokes the recovery session after a successful password change.
 
+After `POST /auth/verify-otp` successfully verifies an `email_change` code, the
+backend sends a plain receipt to the new address through Resend. Set the
+server-only `RESEND_API_KEY` in Render to enable delivery, and ensure
+`noreply@navipet.me` is an approved Resend sender. The receipt contains no
+verification link; the existing six-digit Supabase email completes the change.
+If receipt delivery fails or the key is absent, the route logs the problem and
+still returns the new session because the verification code has been consumed.
+
 Missing, malformed, expired, or otherwise invalid credentials return a generic
 `401 Authentication required` response. The backend never accepts a user ID
 from request data as proof of identity.

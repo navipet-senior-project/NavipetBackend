@@ -58,6 +58,7 @@ const EnvironmentSchema = Type.Object(
     SUPABASE_URL: HttpUrl,
     SUPABASE_ANON_KEY: Type.String({ minLength: 1 }),
     SUPABASE_SERVICE_ROLE_KEY: Type.Optional(Type.String({ minLength: 1 })),
+    RESEND_API_KEY: Type.Optional(Type.String({ minLength: 1 })),
     SUPABASE_JWT_ISSUER: HttpUrl,
     SUPABASE_JWT_AUDIENCE: Type.String({ minLength: 1 }),
     MULTISET_API_KEY: Type.Optional(Type.String({ minLength: 1 })),
@@ -169,6 +170,7 @@ function isValidMapboxBounds(
 export function parseEnv(input: RawEnvironment): Environment {
   const nodeEnv = input.NODE_ENV ?? 'development';
   const serviceRoleKey = optionalValue(input.SUPABASE_SERVICE_ROLE_KEY);
+  const resendApiKey = optionalValue(input.RESEND_API_KEY);
   const multisetApiKey = optionalValue(input.MULTISET_API_KEY);
   const multisetApiBaseUrl = optionalValue(input.MULTISET_API_BASE_URL);
   const mapboxAccessToken = optionalValue(input.MAPBOX_ACCESS_TOKEN);
@@ -242,6 +244,9 @@ export function parseEnv(input: RawEnvironment): Environment {
     ...(serviceRoleKey === undefined
       ? {}
       : { SUPABASE_SERVICE_ROLE_KEY: serviceRoleKey }),
+    ...(resendApiKey === undefined
+      ? {}
+      : { RESEND_API_KEY: resendApiKey }),
     ...(multisetApiKey === undefined
       ? {}
       : { MULTISET_API_KEY: multisetApiKey }),
