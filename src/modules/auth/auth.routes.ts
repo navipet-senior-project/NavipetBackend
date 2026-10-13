@@ -498,13 +498,13 @@ const authRoutes: FastifyPluginCallbackTypebox = (fastify, _options, done) => {
       if (fastify.config.RESEND_API_KEY === undefined) {
         request.log.warn('Email-change receipt skipped: RESEND_API_KEY is not configured');
       } else {
-        try {
-          await sendEmailChangeReceipt(request.body.email, fastify.config.RESEND_API_KEY);
-        } catch (cause) {
-          // Verification already consumed the OTP. Preserve the new session even
-          // when receipt delivery fails, and log the failure for follow-up.
-          request.log.error({ err: cause }, 'Email-change receipt delivery failed');
-        }
+        // Verification already consumed the OTP. Do not hold the new session
+        // behind receipt delivery, and log a failure for follow-up.
+        void sendEmailChangeReceipt(request.body.email, fastify.config.RESEND_API_KEY).catch(
+          (cause: unknown) => {
+            request.log.error({ err: cause }, 'Email-change receipt delivery failed');
+          },
+        );
       }
     }
     return {

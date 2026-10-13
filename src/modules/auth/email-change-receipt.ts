@@ -1,7 +1,6 @@
 const receiptText =
   'Your NaviPet email address has been changed successfully. ' +
-  'The next time you sign in, use your new email address. ' +
-  'If you did not make this change, contact NaviPet support.';
+  'The next time you sign in, use your new email address.';
 
 export async function sendEmailChangeReceipt(email: string, apiKey: string): Promise<void> {
   const response = await fetch('https://api.resend.com/emails', {
@@ -17,8 +16,7 @@ export async function sendEmailChangeReceipt(email: string, apiKey: string): Pro
       text: receiptText,
       html:
         '<p>Your NaviPet email address has been changed successfully.</p>' +
-        '<p>The next time you sign in, use your new email address.</p>' +
-        '<p>If you did not make this change, contact NaviPet support.</p>',
+        '<p>The next time you sign in, use your new email address.</p>',
     }),
     signal: AbortSignal.timeout(5_000),
   });
