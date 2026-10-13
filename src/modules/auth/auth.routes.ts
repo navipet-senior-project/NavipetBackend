@@ -4,6 +4,7 @@ import type { FastifyReply, FastifyRequest } from 'fastify';
 import { AppError } from '../../common/errors/app-error.js';
 import { ErrorCode } from '../../common/errors/error-codes.js';
 import { AUTH_CHANGE_EMAIL_REAUTH_MAX_AGE_SECONDS } from '../../config/constants.js';
+import { sendEmailChangeReceipt } from './email-change-receipt.js';
 import type { AuthenticatedUser } from '../../plugins/auth.js';
 import {
   ChangeEmailRouteSchema,
@@ -469,6 +470,7 @@ const authRoutes: FastifyPluginCallbackTypebox = (fastify, _options, done) => {
 
   const verifyOtpHandler = async (request: {
     body: { email: string; code: string; type: 'recovery' | 'register' | 'email_change' };
+    log: FastifyRequest['log'];
   }): Promise<{ access_token: string; refresh_token: string; message?: string }> => {
     let result;
     try {
@@ -491,6 +493,19 @@ const authRoutes: FastifyPluginCallbackTypebox = (fastify, _options, done) => {
         statusCode: 401,
         message: 'The verification code is incorrect or has expired.',
       });
+    }
+    if (request.body.type === 'email_change') {
+      if (fastify.config.RESEND_API_KEY === undefined) {
+        request.log.warn('Email-change receipt skipped: RESEND_API_KEY is not configured');
+      } else {
+        // Verification already consumed the OTP. Do not hold the new session
+        // behind receipt delivery, and log a failure for follow-up.
+        void sendEmailChangeReceipt(request.body.email, fastify.config.RESEND_API_KEY).catch(
+          (cause: unknown) => {
+            request.log.error({ err: cause }, 'Email-change receipt delivery failed');
+          },
+        );
+      }
     }
     return {
       access_token: result.tokens.accessToken,

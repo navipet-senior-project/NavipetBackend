@@ -70,6 +70,8 @@ services:
         value: authenticated
       - key: SUPABASE_SERVICE_ROLE_KEY
         sync: false
+      - key: RESEND_API_KEY
+        sync: false
       - key: MULTISET_API_KEY
         sync: false
       - key: MULTISET_API_BASE_URL
