@@ -45,6 +45,7 @@ import {
 import type {
   ProfileAvatarUpload,
   ProfileRecord,
+  ProfileRole,
   UpdateProfileInput,
 } from '../modules/profiles/profiles.types.js';
 
@@ -76,6 +77,7 @@ export interface SignUpCredentials {
   password: string;
   firstName: string;
   lastName: string;
+  role: ProfileRole;
 }
 
 export interface LoginTokens {
@@ -834,6 +836,7 @@ export function createSupabaseResources(config: Environment): SupabaseResources 
             first_name: credentials.firstName,
             last_name: credentials.lastName,
             display_name: `${credentials.firstName} ${credentials.lastName}`,
+            role: credentials.role,
           },
         },
       });

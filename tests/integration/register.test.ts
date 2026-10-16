@@ -11,6 +11,7 @@ const validPayload = {
   lastName: 'Shark',
   email: 'student@example.com',
   password: 'Password1!',
+  role: 'student',
 };
 
 function buildAppWithSignUp(
@@ -67,7 +68,7 @@ describe('registration', () => {
     );
   });
 
-  it('forwards firstName, lastName, email, and password to the signUp gateway', async () => {
+  it('forwards firstName, lastName, email, password, and role to the signUp gateway', async () => {
     const signUp = vi.fn<RegisterGateway['signUp']>().mockResolvedValue({
       user: { id: '11111111-1111-4111-8111-111111111111', email: 'student@example.com' },
       accessToken: null,
@@ -86,6 +87,7 @@ describe('registration', () => {
       password: 'Password1!',
       firstName: 'Elbee',
       lastName: 'Shark',
+      role: 'student',
     });
   });
 
@@ -292,6 +294,67 @@ describe('registration', () => {
       });
 
       expect(response.statusCode).toBe(200);
+    });
+  });
+
+  describe('role validation', () => {
+    it('accepts professor and forwards it to the signUp gateway', async () => {
+      const signUp = vi.fn<RegisterGateway['signUp']>().mockResolvedValue({
+        user: { id: '11111111-1111-4111-8111-111111111111', email: 'student@example.com' },
+        accessToken: null,
+        refreshToken: null,
+      });
+      app = await buildAppWithSignUp(signUp);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/auth/register',
+        payload: { ...validPayload, role: 'professor' },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(signUp).toHaveBeenCalledWith(
+        expect.objectContaining({ role: 'professor' }),
+      );
+    });
+
+    it('returns 422 VALIDATION_ERROR when role is missing without calling Supabase', async () => {
+      const signUp = vi.fn<RegisterGateway['signUp']>();
+      app = await buildAppWithSignUp(signUp);
+      const withoutRole = Object.fromEntries(
+        Object.entries(validPayload).filter(([key]) => key !== 'role'),
+      );
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/auth/register',
+        payload: withoutRole,
+      });
+
+      expect(response.statusCode).toBe(422);
+      expect(response.json()).toEqual({
+        error: { code: 'VALIDATION_ERROR', message: anyString, requestId: anyString },
+      });
+      expect(signUp).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      ['an unknown role', 'administrator'],
+      ['null', null],
+      ['a different case', 'Student'],
+      ['an empty string', ''],
+    ])('returns 422 for %s without calling Supabase', async (_label, role) => {
+      const signUp = vi.fn<RegisterGateway['signUp']>();
+      app = await buildAppWithSignUp(signUp);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/auth/register',
+        payload: { ...validPayload, role },
+      });
+
+      expect(response.statusCode).toBe(422);
+      expect(signUp).not.toHaveBeenCalled();
     });
   });
 

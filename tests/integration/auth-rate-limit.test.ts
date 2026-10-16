@@ -55,6 +55,7 @@ describe('auth route rate limits', () => {
       lastName: 'Shark',
       email: 'student@example.com',
       password: 'Password1!',
+      role: 'student',
     };
     const first = await app.inject({
       method: 'POST',

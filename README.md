@@ -117,6 +117,12 @@ verification link; the existing six-digit Supabase email completes the change.
 If receipt delivery fails or the key is absent, the route logs the problem and
 still returns the new session because the verification code has been consumed.
 
+`POST /auth/register` requires `role`: `student` or `professor`. The backend
+passes it to Supabase as sign-up metadata, and the `handle_new_user` trigger
+copies it to `profiles.role` (any other value is stored as `null`). Role is
+self-declared and can be changed later with `PATCH /profiles/me`, so never use
+it for authorization.
+
 Missing, malformed, expired, or otherwise invalid credentials return a generic
 `401 Authentication required` response. The backend never accepts a user ID
 from request data as proof of identity.

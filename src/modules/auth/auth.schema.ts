@@ -1,6 +1,7 @@
 import Type from 'typebox';
 
 import { ErrorResponseSchema } from '../../common/errors/error-response.schema.js';
+import { ProfileRoleSchema } from '../profiles/profiles.schema.js';
 
 export const LoginBodySchema = Type.Object(
   {
@@ -82,6 +83,7 @@ export const RegisterBodySchema = Type.Object(
       pattern: '^(?=.*[0-9])(?=.*[^A-Za-z0-9]).*$',
       example: 'Password1!',
     }),
+    role: ProfileRoleSchema,
   },
   { additionalProperties: false },
 );
@@ -103,7 +105,7 @@ export const RegisterResponseSchema = Type.Object(
 
 export const RegisterRouteSchema = {
   tags: ['Authentication'],
-  summary: 'Register with first name, last name, email, and password',
+  summary: 'Register with first name, last name, email, password, and role',
   description:
     'Creates an unconfirmed account and emails it a 6-digit verification ' +
     'code.\n\n' +
@@ -113,6 +115,9 @@ export const RegisterRouteSchema = {
     'validation.\n\n' +
     'The password needs 8 to 128 characters with at least one digit and ' +
     'one special character.\n\n' +
+    '`role` is required and must be `student` or `professor`. It is ' +
+    'self-declared: it is stored on the profile, can be changed later with ' +
+    '`PATCH /profiles/me`, and is not an authorization signal.\n\n' +
     '---\n\n' +
     'Next step: submit the emailed code to `POST /auth/verify-otp` with ' +
     '`type: "register"`. That call confirms the account and signs it in.',
@@ -122,10 +127,10 @@ export const RegisterRouteSchema = {
     400: ErrorResponseSchema('Malformed JSON body.'),
     409: ErrorResponseSchema('The normalized email is already registered.'),
     422: ErrorResponseSchema(
-      'firstName/lastName/email/password failed validation, either ' +
+      'firstName/lastName/email/password/role failed validation, either ' +
         'schema validation (e.g. blank name, malformed email, password ' +
-        'missing a digit or special character) or a Supabase-side check ' +
-        '(e.g. weak_password).',
+        'missing a digit or special character, missing or unknown role) ' +
+        'or a Supabase-side check (e.g. weak_password).',
     ),
     429: ErrorResponseSchema('Too many registration attempts.'),
     500: ErrorResponseSchema(

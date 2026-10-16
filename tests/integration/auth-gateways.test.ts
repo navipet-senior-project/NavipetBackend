@@ -49,6 +49,7 @@ describe('signUp gateway', () => {
         password: 'a-long-user-password',
         firstName: 'Elbee',
         lastName: 'Shark',
+        role: 'student',
       }),
     ).resolves.toEqual({
       user: { id: baseUser.id, email: baseUser.email },
@@ -67,6 +68,7 @@ describe('signUp gateway', () => {
         password: 'a-long-user-password',
         firstName: 'Elbee',
         lastName: 'Shark',
+        role: 'student',
       }),
     ).resolves.toEqual({
       user: { id: baseUser.id, email: baseUser.email },
@@ -90,11 +92,12 @@ describe('signUp gateway', () => {
         password: 'a-long-user-password',
         firstName: 'Elbee',
         lastName: 'Shark',
+        role: 'student',
       }),
     ).rejects.toMatchObject({ code: 'email_exists' });
   });
 
-  it('forwards first_name, last_name, and display_name metadata to Supabase', async () => {
+  it('forwards first_name, last_name, display_name, and role metadata to Supabase', async () => {
     const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
       jsonResponse(baseUser),
     );
@@ -105,16 +108,23 @@ describe('signUp gateway', () => {
       password: 'a-long-user-password',
       firstName: 'Elbee',
       lastName: 'Shark',
+      role: 'student',
     });
 
     const [, init] = fetchSpy.mock.calls[0] as [string, RequestInit];
     const body = JSON.parse(init.body as string) as {
-      data: { first_name: string; last_name: string; display_name: string };
+      data: {
+        first_name: string;
+        last_name: string;
+        display_name: string;
+        role: string;
+      };
     };
     expect(body.data).toEqual({
       first_name: 'Elbee',
       last_name: 'Shark',
       display_name: 'Elbee Shark',
+      role: 'student',
     });
   });
 });

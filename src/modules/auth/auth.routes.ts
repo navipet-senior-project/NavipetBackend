@@ -18,6 +18,7 @@ import {
   ResetPasswordRouteSchema,
   VerifyOtpRouteSchema,
 } from './auth.schema.js';
+import type { ProfileRole } from '../profiles/profiles.types.js';
 
 function supabaseErrorCode(cause: unknown): string | undefined {
   if (typeof cause !== 'object' || cause === null || !('code' in cause)) return undefined;
@@ -122,7 +123,13 @@ const authRoutes: FastifyPluginCallbackTypebox = (fastify, _options, done) => {
 
   const registerHandler = async (
     request: {
-      body: { firstName: string; lastName: string; email: string; password: string };
+      body: {
+        firstName: string;
+        lastName: string;
+        email: string;
+        password: string;
+        role: ProfileRole;
+      };
     },
   ): Promise<{
     message: 'Verification code sent. Check your inbox.';
@@ -134,6 +141,7 @@ const authRoutes: FastifyPluginCallbackTypebox = (fastify, _options, done) => {
         password: request.body.password,
         firstName: request.body.firstName,
         lastName: request.body.lastName,
+        role: request.body.role,
       });
     } catch (cause) {
       const code = (cause as { code?: string }).code;
