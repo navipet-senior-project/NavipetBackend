@@ -70,7 +70,7 @@ language plpgsql
 security definer set search_path = ''
 as $$
 begin
-  insert into public.profiles (id, display_name, email)
+  insert into public.profiles (id, display_name, email, role)
   values (
     new.id,
     coalesce(
@@ -80,7 +80,11 @@ begin
         else split_part(coalesce(new.email, 'NaviPet Explorer'), '@', 1)
       end
     ),
-    new.email
+    new.email,
+    case
+      when new.raw_user_meta_data ->> 'role' in ('student', 'professor')
+        then new.raw_user_meta_data ->> 'role'
+    end
   )
   on conflict (id) do nothing;
   return new;
