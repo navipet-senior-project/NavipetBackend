@@ -251,6 +251,7 @@ export function createSupabaseResources(config: Environment): SupabaseResources 
     longitude: number | null;
     outdoor_destination_latitude: number | null;
     outdoor_destination_longitude: number | null;
+    arrival_radius_meters: number | null;
     source: string;
     metadata: Record<string, unknown>;
     active?: boolean;
@@ -299,7 +300,7 @@ export function createSupabaseResources(config: Environment): SupabaseResources 
   const campusColumns =
     'id,type,name,code,parent_destination_id,building_code,room_number,' +
     'floor_number,latitude,longitude,outdoor_destination_latitude,' +
-    'outdoor_destination_longitude,source,metadata,active,searchable,' +
+    'outdoor_destination_longitude,arrival_radius_meters,source,metadata,active,searchable,' +
     'destination_aliases(alias)';
 
   function mapCampusDestination(
@@ -322,6 +323,7 @@ export function createSupabaseResources(config: Environment): SupabaseResources 
       longitude: row.longitude,
       outdoorDestinationLatitude: row.outdoor_destination_latitude,
       outdoorDestinationLongitude: row.outdoor_destination_longitude,
+      arrivalRadiusMeters: row.arrival_radius_meters,
       source: row.source,
       active: row.active ?? true,
       searchable: row.searchable ?? true,
@@ -745,7 +747,7 @@ export function createSupabaseResources(config: Environment): SupabaseResources 
     async searchBuildingRooms(buildingId, query, limit) {
       const buildingResponse = (await publicClient
         .from('campus_destinations')
-        .select('name')
+        .select('name,arrival_radius_meters')
         .eq('id', buildingId)
         .eq('type', 'building')
         .eq('active', true)

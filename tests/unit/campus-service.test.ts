@@ -28,6 +28,7 @@ function destination(
     longitude: null,
     outdoorDestinationLatitude: null,
     outdoorDestinationLongitude: null,
+    arrivalRadiusMeters: null,
     source: 'csulb_building_names_codes',
     active: true,
     searchable: true,

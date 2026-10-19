@@ -23,6 +23,7 @@ const destination = {
   longitude: -118.114,
   outdoorDestinationLatitude: null,
   outdoorDestinationLongitude: null,
+  arrivalRadiusMeters: null,
   source: 'csulb_building_names_codes',
   active: true,
   searchable: true,
