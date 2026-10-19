@@ -331,6 +331,9 @@ export function toPublicCampusResult(
                   },
                 }
               : {}),
+            ...(hasOutdoor && destination.arrivalRadiusMeters !== null
+              ? { arrivalRadiusMeters: destination.arrivalRadiusMeters }
+              : {}),
             ...(hasIndoor
               ? { indoorDestinationId: destination.indoorDestinationId as string }
               : {}),
@@ -359,6 +362,7 @@ function hasOutdoorDestination(result: PublicCampusResult): boolean {
 function withDerivedOutdoorDestination(
   result: PublicCampusResult,
   outdoor: ResolvedOutdoorDestination,
+  arrivalRadiusMeters: number | null,
 ): PublicCampusResult {
   return {
     ...result,
@@ -367,6 +371,7 @@ function withDerivedOutdoorDestination(
       : { attribution: outdoor.attribution }),
     navigation: {
       ...result.navigation,
+      ...(arrivalRadiusMeters === null ? {} : { arrivalRadiusMeters }),
       outdoorDestination: {
         latitude: outdoor.latitude,
         longitude: outdoor.longitude,
@@ -641,7 +646,11 @@ export function createCampusService(dependencies: CampusServiceDependencies) {
             const result = ranked[index] as PublicCampusResult;
             return outdoor === undefined
               ? result
-              : withDerivedOutdoorDestination(result, outdoor);
+              : withDerivedOutdoorDestination(
+                  result,
+                  outdoor,
+                  destination.arrivalRadiusMeters,
+                );
           })
           .filter(hasOutdoorDestination);
         if (routableDerived.length > 0) {
@@ -667,7 +676,7 @@ export function createCampusService(dependencies: CampusServiceDependencies) {
       const outdoor = await outdoorFallback.resolve(place);
       return outdoor === null
         ? result
-        : withDerivedOutdoorDestination(result, outdoor);
+        : withDerivedOutdoorDestination(result, outdoor, place.arrivalRadiusMeters);
     },
     async searchRooms(buildingCode: string, input: string, limit: number) {
       const building = await dependencies.campusPlaces.findBuildingByCode(

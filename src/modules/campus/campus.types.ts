@@ -24,6 +24,7 @@ export interface CampusDestinationRecord {
   longitude: number | null;
   outdoorDestinationLatitude: number | null;
   outdoorDestinationLongitude: number | null;
+  arrivalRadiusMeters: number | null;
   source: string;
   active: boolean;
   searchable: boolean;
@@ -108,6 +109,7 @@ export interface PublicCampusResult {
   navigation?: {
     outdoorDestination?: { latitude: number; longitude: number };
     indoorDestinationId?: string;
+    arrivalRadiusMeters?: number;
   };
 }
 

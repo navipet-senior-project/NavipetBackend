@@ -5,6 +5,8 @@ import { Writable } from 'node:stream';
 import { buildApp } from '../../src/app.js';
 import type {
   CampusDestinationRecord,
+  CampusSearchResponse,
+  PublicCampusResult,
   ExternalPlacesGateway,
 } from '../../src/modules/campus/campus.types.js';
 import type { JwtVerifier } from '../../src/plugins/auth.js';
@@ -38,6 +40,7 @@ function destination(
     longitude: null,
     outdoorDestinationLatitude: null,
     outdoorDestinationLongitude: null,
+    arrivalRadiusMeters: null,
     source: 'csulb_building_names_codes',
     active: true,
     searchable: true,
@@ -120,6 +123,92 @@ describe('campus routes', () => {
 
   afterEach(async () => {
     await app?.close();
+  });
+
+  describe('arrival radius', () => {
+    const routes = [
+      '/autocomplete?q=COB',
+      `/places/${ids.cob}`,
+      '/buildings/COB/rooms?q=140',
+    ];
+
+    it.each(routes)('emits a configured radius with stored coordinates: %s', async (url) => {
+      const record = destination({
+        latitude: 33.7838,
+        longitude: -118.1141,
+        arrivalRadiusMeters: 25,
+      });
+      app = await buildTestApp({}, {
+        authVerifier: verifier(),
+        supabaseResources: resources({
+          searchDestinations: vi.fn().mockResolvedValue([record]),
+          findPlaceById: vi.fn().mockResolvedValue(record),
+          searchBuildingRooms: vi.fn().mockResolvedValue([destination({
+            ...record, type: 'room', roomNumber: '140', parentDestinationId: ids.cob,
+          })]),
+        }),
+        externalPlaces: noExternal(),
+      });
+
+      const response = await app.inject({ method: 'GET', headers: authorization, url });
+
+      expect(response.statusCode).toBe(200);
+      const body = response.json<{ place?: PublicCampusResult; results?: PublicCampusResult[] }>();
+      const result = body.place ?? body.results?.[0];
+      expect(result?.navigation).toEqual({
+        outdoorDestination: { latitude: 33.7838, longitude: -118.1141 },
+        arrivalRadiusMeters: 25,
+      });
+    });
+
+    it.each([
+      { label: 'null radius', arrivalRadiusMeters: null, latitude: 33.7838, longitude: -118.1141 },
+      { label: 'no outdoor point', arrivalRadiusMeters: 25, latitude: null, longitude: null },
+    ])('omits the radius for $label', async (overrides) => {
+      const record = destination({ ...overrides, indoorDestinationId: 'indoor-cob' });
+      app = await buildTestApp({}, {
+        authVerifier: verifier(),
+        supabaseResources: resources({ findPlaceById: vi.fn().mockResolvedValue(record) }),
+        externalPlaces: noExternal(),
+      });
+
+      const response = await app.inject({
+        method: 'GET', headers: authorization, url: `/places/${ids.cob}`,
+      });
+
+      expect(response.statusCode).toBe(200);
+      const { place } = response.json<{ place: PublicCampusResult }>();
+      expect(place.navigation).not.toHaveProperty('arrivalRadiusMeters');
+      expect(place.navigation?.indoorDestinationId).toBe('indoor-cob');
+    });
+
+    it.each(['/autocomplete?q=COB', `/places/${ids.cob}`])(
+      'emits a configured radius with derived coordinates: %s', async (url) => {
+        const record = destination({ arrivalRadiusMeters: 25 });
+        app = await buildTestApp({}, {
+          authVerifier: verifier(),
+          supabaseResources: resources({
+            searchDestinations: vi.fn().mockResolvedValue([record]),
+            findPlaceById: vi.fn().mockResolvedValue(record),
+          }),
+          externalPlaces: { searchExternalPlaces: vi.fn().mockResolvedValue([{
+            id: 'mapbox.cob', name: 'College of Business', description: 'CSULB',
+            latitude: 33.7838, longitude: -118.1141,
+          }]) },
+        });
+
+        const response = await app.inject({ method: 'GET', headers: authorization, url });
+
+        expect(response.statusCode).toBe(200);
+        const body = response.json<{ place?: PublicCampusResult; results?: PublicCampusResult[] }>();
+        const result = body.place ?? body.results?.[0];
+        expect(result?.id).toBe(ids.cob);
+        expect(result?.navigation).toEqual({
+          outdoorDestination: { latitude: 33.7838, longitude: -118.1141 },
+          arrivalRadiusMeters: 25,
+        });
+      },
+    );
   });
 
   it.each([
@@ -336,6 +425,7 @@ describe('campus routes', () => {
     expect(response.json()).toMatchObject({
       results: [{ source: 'mapbox', external: true }],
     });
+    expect(response.json<CampusSearchResponse>().results[0]?.navigation).not.toHaveProperty('arrivalRadiusMeters');
   });
 
   it('supports verified building-contained amenities through parent relationships', async () => {

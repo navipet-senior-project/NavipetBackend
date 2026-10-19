@@ -38,6 +38,9 @@ export const PublicCampusResultSchema = Type.Object(
       Type.Object(
         {
           outdoorDestination: Type.Optional(OutdoorDestinationSchema),
+          arrivalRadiusMeters: Type.Optional(
+            Type.Integer({ minimum: 3, maximum: 50 }),
+          ),
           indoorDestinationId: Type.Optional(Type.String()),
         },
         { additionalProperties: false },
