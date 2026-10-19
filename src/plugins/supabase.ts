@@ -337,25 +337,42 @@ export function createSupabaseResources(config: Environment): SupabaseResources 
     destinations: CampusDestinationRecord[],
   ): Promise<CampusDestinationRecord[]> {
     if (adminClient === null || destinations.length === 0) return destinations;
-    const response = (await adminClient
-      .from('destination_provider_refs')
-      .select('destination_id,external_id')
-      .eq('provider', 'multiset')
-      .in(
-        'destination_id',
-        destinations.map((destination) => destination.id),
-      )) as unknown as {
-      data: Array<{ destination_id: string; external_id: string }> | null;
-      error: Error | null;
-    };
-    if (response.error !== null) throw response.error;
-    return attachIndoorDestinationIds(
-      destinations,
-      (response.data ?? []).map((reference) => ({
+    const destinationIds = destinations.map((destination) => destination.id);
+    const [refsResponse, doorsResponse] = (await Promise.all([
+      adminClient
+        .from('destination_provider_refs')
+        .select('destination_id,external_id')
+        .eq('provider', 'multiset')
+        .in('destination_id', destinationIds),
+      adminClient
+        .from('vec_destination_points')
+        .select('destination_id,point_key')
+        .eq('active', true)
+        .in('destination_id', destinationIds),
+    ])) as unknown as [
+      {
+        data: Array<{ destination_id: string; external_id: string }> | null;
+        error: Error | null;
+      },
+      {
+        data: Array<{ destination_id: string; point_key: string }> | null;
+        error: Error | null;
+      },
+    ];
+    if (refsResponse.error !== null) throw refsResponse.error;
+    if (doorsResponse.error !== null) throw doorsResponse.error;
+    // Door points go last so they win: their destination_id is a foreign key,
+    // while a provider ref only names the door key as text.
+    return attachIndoorDestinationIds(destinations, [
+      ...(refsResponse.data ?? []).map((reference) => ({
         destinationId: reference.destination_id,
         externalId: reference.external_id,
       })),
-    );
+      ...(doorsResponse.data ?? []).map((door) => ({
+        destinationId: door.destination_id,
+        externalId: door.point_key,
+      })),
+    ]);
   }
 
   function forAccessToken(accessToken: string) {
