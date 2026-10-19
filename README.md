@@ -127,6 +127,30 @@ Missing, malformed, expired, or otherwise invalid credentials return a generic
 `401 Authentication required` response. The backend never accepts a user ID
 from request data as proof of identity.
 
+## Indoor door import (VEC)
+
+`public.vec_destination_points` stores the door position of every VEC room in
+the MultiSet MapSet frame (`MSET_XTBY7AM7ZK77`, origin = `Floor 1 2` map root,
+left-handed, +Y up, metres). Only doors are stored.
+
+The source is the Unity export (contract v2, see issue #43), committed as
+`data/vec-points.json`.
+
+```bash
+npm run vec-points:dry-run -- --file=data/vec-points.json
+npm run vec-points:apply -- --file=data/vec-points.json
+```
+
+The dry-run prints planned inserts, updates, deactivations, unmatched doors
+(no VEC room row) and floor mismatches. Apply refuses to run while any floor
+mismatch exists. Rows are never deleted: keys missing from the file and rows
+of older map versions are set `active = false`.
+
+Applying is the go-live step: the API takes a VEC room's
+`navigation.indoorDestinationId` from its active door point, so the room is
+indoor-navigable in the app as soon as its door is applied. Do not set
+`multiset_destination_id` for VEC rooms in `data/csulb-campus-places.csv`.
+
 ## Supabase security
 
 The Supabase integration separates capabilities by trust level:

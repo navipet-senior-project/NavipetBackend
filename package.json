@@ -14,6 +14,8 @@
     "concept3d:dry-run": "tsx scripts/import-concept3d-coordinates.ts",
     "concept3d:apply": "tsx scripts/import-concept3d-coordinates.ts --apply --approved",
     "import:concept3d": "tsx scripts/import-concept3d-coordinates.ts --apply --approved",
+    "vec-points:dry-run": "tsx scripts/import-vec-points.ts",
+    "vec-points:apply": "tsx scripts/import-vec-points.ts --apply --approved",
     "dev": "tsx watch src/server.ts",
     "test": "vitest run",
     "test:watch": "vitest",
