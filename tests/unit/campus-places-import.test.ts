@@ -280,3 +280,58 @@ describe('assertApplyAuthorized', () => {
     }).not.toThrow();
   });
 });
+
+describe('VEC room rows', () => {
+  const csv = readFileSync(
+    fileURLToPath(new URL('../../data/csulb-campus-places.csv', import.meta.url)),
+    'utf8',
+  );
+  const prepared = prepareCampusPlaces(csv);
+  const vecRooms = prepared.destinations.filter(
+    (destination) => destination.type === 'room' && destination.building_code === 'VEC',
+  );
+
+  test('lists every VEC door room on floors 1 and 2', () => {
+    expect(
+      vecRooms.map((room) => [room.code, room.room_number, room.floor_number]),
+    ).toEqual([
+      ['VEC-119', '119', '1'],
+      ['VEC-120', '120', '1'],
+      ['VEC-121', '121', '1'],
+      ['VEC-124', '124', '1'],
+      ['VEC-127', '127', '1'],
+      ['VEC-128', '128', '1'],
+      ['VEC-132', '132', '1'],
+      ['VEC-134', '134', '1'],
+      ['VEC-136', '136', '1'],
+      ['VEC-201', '201', '2'],
+      ['VEC-202', '202', '2'],
+      ['VEC-215', '215', '2'],
+      ['VEC-217', '217', '2'],
+      ['VEC-218', '218', '2'],
+      ['VEC-220', '220', '2'],
+      ['VEC-224', '224', '2'],
+      ['VEC-227', '227', '2'],
+    ]);
+  });
+
+  test('attaches every VEC room to the Vivian Engineering Center', () => {
+    expect(vecRooms.every((room) => room.parent_code === 'VEC')).toBe(true);
+  });
+
+  test('adds a Vivian Engineering Center alias for every VEC room', () => {
+    const aliases = new Set(prepared.aliases.map((alias) => alias.alias));
+    for (const room of vecRooms) {
+      expect(aliases).toContain(`Vivian Engineering Center ${room.room_number ?? ''}`);
+    }
+  });
+
+  test('never links VEC rooms through multiset_destination_id', () => {
+    const vecKeys = new Set(vecRooms.map((room) => room.import_key));
+    expect(
+      prepared.providerRefs.filter(
+        (ref) => ref.provider === 'multiset' && vecKeys.has(ref.destination_import_key),
+      ),
+    ).toEqual([]);
+  });
+});
