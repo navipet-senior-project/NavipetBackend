@@ -174,3 +174,164 @@ export function prepareVecPoints(raw: unknown): PreparedVecExport {
     skippedNonDoorCount,
   };
 }
+
+export interface VecRoom {
+  id: string;
+  room_number: string;
+  floor_number: string | null;
+}
+
+export interface VecPointRow {
+  point_key: string;
+  point_type: 'door';
+  room_number: string;
+  floor: string;
+  x: number;
+  y: number;
+  z: number;
+  heading_deg: number | null;
+  map_provider: 'multiset';
+  map_code: string;
+  map_version: number;
+  frame: 'multiset-mapset';
+  destination_id: string;
+  exported_at: string;
+  active: boolean;
+}
+
+export interface ExistingVecPoint extends VecPointRow {
+  id: string;
+}
+
+export interface MultisetRef {
+  destination_id: string;
+  external_id: string;
+}
+
+export interface VecSnapshot {
+  rooms: VecRoom[];
+  points: ExistingVecPoint[];
+  multisetRefs: MultisetRef[];
+}
+
+export interface VecPointsReport {
+  mapCode: string;
+  mapVersion: number;
+  insert: VecPointRow[];
+  update: VecPointRow[];
+  unchangedCount: number;
+  deactivate: Array<{ id: string; point_key: string; map_version: number }>;
+  unmatched: Array<{ point_key: string; room_number: string }>;
+  floorMismatches: Array<{
+    point_key: string;
+    room_number: string;
+    exportFloor: string;
+    roomFloor: string | null;
+  }>;
+  skippedNonDoorCount: number;
+  danglingRefs: MultisetRef[];
+}
+
+function rowsEqual(desired: VecPointRow, current: ExistingVecPoint): boolean {
+  return (
+    desired.room_number === current.room_number &&
+    desired.floor === current.floor &&
+    desired.x === current.x &&
+    desired.y === current.y &&
+    desired.z === current.z &&
+    desired.heading_deg === current.heading_deg &&
+    desired.destination_id === current.destination_id &&
+    Date.parse(desired.exported_at) === Date.parse(current.exported_at) &&
+    desired.active === current.active
+  );
+}
+
+export function compareVecPoints(
+  prepared: PreparedVecExport,
+  snapshot: VecSnapshot,
+): VecPointsReport {
+  const roomsByNumber = new Map(snapshot.rooms.map((room) => [room.room_number, room]));
+  const currentVersion = new Map(
+    snapshot.points
+      .filter(
+        (point) =>
+          point.map_code === prepared.map_code &&
+          point.map_version === prepared.map_version,
+      )
+      .map((point) => [point.point_key, point]),
+  );
+
+  const report: VecPointsReport = {
+    mapCode: prepared.map_code,
+    mapVersion: prepared.map_version,
+    insert: [],
+    update: [],
+    unchangedCount: 0,
+    deactivate: [],
+    unmatched: [],
+    floorMismatches: [],
+    skippedNonDoorCount: prepared.skippedNonDoorCount,
+    danglingRefs: [],
+  };
+  const desiredKeys = new Set<string>();
+
+  for (const door of prepared.doors) {
+    const room = roomsByNumber.get(door.room_number);
+    if (room === undefined) {
+      report.unmatched.push({ point_key: door.point_key, room_number: door.room_number });
+      continue;
+    }
+    if (room.floor_number !== door.floor) {
+      report.floorMismatches.push({
+        point_key: door.point_key,
+        room_number: door.room_number,
+        exportFloor: door.floor,
+        roomFloor: room.floor_number,
+      });
+      continue;
+    }
+
+    const row: VecPointRow = {
+      point_key: door.point_key,
+      point_type: 'door',
+      room_number: door.room_number,
+      floor: door.floor,
+      x: door.x,
+      y: door.y,
+      z: door.z,
+      heading_deg: door.heading_deg,
+      map_provider: prepared.map_provider,
+      map_code: prepared.map_code,
+      map_version: prepared.map_version,
+      frame: prepared.frame,
+      destination_id: room.id,
+      exported_at: prepared.exported_at,
+      active: true,
+    };
+    desiredKeys.add(door.point_key);
+
+    const current = currentVersion.get(door.point_key);
+    if (current === undefined) report.insert.push(row);
+    else if (!rowsEqual(row, current)) report.update.push(row);
+    else report.unchangedCount += 1;
+  }
+
+  for (const point of snapshot.points) {
+    if (!point.active || point.map_code !== prepared.map_code) continue;
+    const otherVersion = point.map_version !== prepared.map_version;
+    if (otherVersion || !desiredKeys.has(point.point_key)) {
+      report.deactivate.push({
+        id: point.id,
+        point_key: point.point_key,
+        map_version: point.map_version,
+      });
+    }
+  }
+
+  const roomIds = new Set(snapshot.rooms.map((room) => room.id));
+  report.danglingRefs = snapshot.multisetRefs.filter(
+    (ref) => roomIds.has(ref.destination_id) && !desiredKeys.has(ref.external_id),
+  );
+
+  return report;
+}
