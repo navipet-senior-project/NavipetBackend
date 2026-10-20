@@ -730,4 +730,95 @@ describe('campus autocomplete service', () => {
 
     expect(result).toMatchObject({ proximity: { intent, status: 'ok' }, results: [] });
   });
+  describe('findPlaceDetail', () => {
+    const verified = { latitude: 33.7823, longitude: -118.1107 };
+    const door = {
+      doorKey: 'VEC119',
+      mapCode: 'MSET_XTBY7AM7ZK77',
+      frame: 'multiset-mapset',
+      floor: '1',
+      x: -5.7651,
+      y: -1.8186,
+      z: 22.6689,
+      headingDeg: 185.36,
+    };
+
+    it('adds the door pose to a room with an indoor id', async () => {
+      const room = destination({ type: 'room', ...verified, indoorDestinationId: 'VEC119' });
+      const deps = gateways([]);
+      deps.campusPlaces.findPlaceById = vi.fn().mockResolvedValue(room);
+      const findDoor = vi.fn().mockResolvedValue(door);
+      deps.campusPlaces.findIndoorDoorPoint = findDoor;
+
+      const place = await createCampusService(deps).findPlaceDetail(room.id);
+
+      expect(findDoor).toHaveBeenCalledWith(room.id);
+      expect(place?.indoor).toEqual({
+        mapCode: 'MSET_XTBY7AM7ZK77',
+        frame: 'multiset-mapset',
+        doorKey: 'VEC119',
+        floor: '1',
+        position: { x: -5.7651, y: -1.8186, z: 22.6689 },
+        headingDeg: 185.36,
+      });
+      expect(place?.navigation?.indoorDestinationId).toBe('VEC119');
+    });
+
+    it('skips the door lookup for a place without an indoor id', async () => {
+      const building = destination(verified);
+      const deps = gateways([]);
+      deps.campusPlaces.findPlaceById = vi.fn().mockResolvedValue(building);
+      const findDoor = vi.fn();
+      deps.campusPlaces.findIndoorDoorPoint = findDoor;
+
+      const place = await createCampusService(deps).findPlaceDetail(building.id);
+
+      expect(findDoor).not.toHaveBeenCalled();
+      expect(place).not.toHaveProperty('indoor');
+    });
+
+    it('omits indoor when the indoor id has no active door', async () => {
+      const room = destination({ type: 'room', ...verified, indoorDestinationId: 'multiset-ref' });
+      const deps = gateways([]);
+      deps.campusPlaces.findPlaceById = vi.fn().mockResolvedValue(room);
+      deps.campusPlaces.findIndoorDoorPoint = vi.fn().mockResolvedValue(null);
+
+      const place = await createCampusService(deps).findPlaceDetail(room.id);
+
+      expect(place).not.toHaveProperty('indoor');
+      expect(place?.navigation?.indoorDestinationId).toBe('multiset-ref');
+    });
+
+    it('omits indoor and reports a door without a heading', async () => {
+      const room = destination({ type: 'room', ...verified, indoorDestinationId: 'VEC119' });
+      const deps = gateways([]);
+      deps.campusPlaces.findPlaceById = vi.fn().mockResolvedValue(room);
+      deps.campusPlaces.findIndoorDoorPoint = vi.fn().mockResolvedValue({ ...door, headingDeg: null });
+      const onSkipped = vi.fn();
+
+      const place = await createCampusService(deps).findPlaceDetail(room.id, onSkipped);
+
+      expect(place).not.toHaveProperty('indoor');
+      expect(onSkipped).toHaveBeenCalledWith('missing-heading', 'VEC119');
+    });
+
+    it('returns null without a door lookup when the place is missing', async () => {
+      const deps = gateways([]);
+      const findDoor = vi.fn();
+      deps.campusPlaces.findIndoorDoorPoint = findDoor;
+
+      await expect(createCampusService(deps).findPlaceDetail('missing')).resolves.toBeNull();
+      expect(findDoor).not.toHaveBeenCalled();
+    });
+
+    it('propagates a door lookup failure', async () => {
+      const room = destination({ type: 'room', ...verified, indoorDestinationId: 'VEC119' });
+      const deps = gateways([]);
+      deps.campusPlaces.findPlaceById = vi.fn().mockResolvedValue(room);
+      deps.campusPlaces.findIndoorDoorPoint = vi.fn().mockRejectedValue(new Error('db down'));
+
+      await expect(createCampusService(deps).findPlaceDetail(room.id)).rejects.toThrow('db down');
+    });
+  });
+
 });

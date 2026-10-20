@@ -1,6 +1,9 @@
 import type {
   CampusCategorySearch,
   CampusDestinationRecord,
+  IndoorDoorPointRecord,
+  IndoorDoorPose,
+  IndoorSkipReason,
   CampusPlacesGateway,
   CampusSearchResponse,
   ContainedDestinationCategory,
@@ -274,6 +277,19 @@ function validCoordinatePair(
     longitude <= 180 &&
     !(latitude === 0 && longitude === 0)
   );
+}
+
+function toIndoorDoorPose(
+  door: IndoorDoorPointRecord & { headingDeg: number },
+): IndoorDoorPose {
+  return {
+    mapCode: door.mapCode,
+    frame: door.frame,
+    doorKey: door.doorKey,
+    floor: door.floor,
+    position: { x: door.x, y: door.y, z: door.z },
+    headingDeg: door.headingDeg,
+  };
 }
 
 export function toPublicCampusResult(
@@ -677,6 +693,20 @@ export function createCampusService(dependencies: CampusServiceDependencies) {
       return outdoor === null
         ? result
         : withDerivedOutdoorDestination(result, outdoor, place.arrivalRadiusMeters);
+    },
+    async findPlaceDetail(
+      id: string,
+      onIndoorSkipped?: (reason: IndoorSkipReason, doorKey: string) => void,
+    ): Promise<PublicCampusResult | null> {
+      const result = await this.findPlace(id);
+      if (!result?.navigation?.indoorDestinationId) return result;
+      const door = await dependencies.campusPlaces.findIndoorDoorPoint(result.id);
+      if (door === null) return result;
+      if (door.headingDeg === null) {
+        onIndoorSkipped?.('missing-heading', door.doorKey);
+        return result;
+      }
+      return { ...result, indoor: toIndoorDoorPose({ ...door, headingDeg: door.headingDeg }) };
     },
     async searchRooms(buildingCode: string, input: string, limit: number) {
       const building = await dependencies.campusPlaces.findBuildingByCode(

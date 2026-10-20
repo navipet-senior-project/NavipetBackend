@@ -106,6 +106,17 @@ export interface UserLocation {
   longitude: number;
 }
 
+export interface IndoorDoorPose {
+  mapCode: string;
+  frame: string;
+  doorKey: string;
+  floor: string;
+  position: { x: number; y: number; z: number };
+  headingDeg: number;
+}
+
+export type IndoorSkipReason = 'missing-heading';
+
 export interface PublicCampusResult {
   id: string;
   type: CampusDestinationType | 'housing' | 'external';
@@ -123,6 +134,7 @@ export interface PublicCampusResult {
     indoorDestinationId?: string;
     arrivalRadiusMeters?: number;
   };
+  indoor?: IndoorDoorPose;
 }
 
 export interface CampusSearchResponse {
