@@ -42,6 +42,17 @@ export interface ExternalPlaceRecord {
   attribution?: string;
 }
 
+export interface IndoorDoorPointRecord {
+  doorKey: string;
+  mapCode: string;
+  frame: 'multiset-mapset';
+  floor: string;
+  x: number;
+  y: number;
+  z: number;
+  headingDeg: number | null;
+}
+
 export interface CampusPlacesGateway {
   searchDestinations(query: string, limit: number): Promise<CampusDestinationRecord[]>;
   searchCategoryDestinations(
@@ -50,6 +61,7 @@ export interface CampusPlacesGateway {
   ): Promise<CampusDestinationRecord[]>;
   listProximityDestinations(): Promise<CampusDestinationRecord[]>;
   findPlaceById(id: string): Promise<CampusDestinationRecord | null>;
+  findIndoorDoorPoint(destinationId: string): Promise<IndoorDoorPointRecord | null>;
   findBuildingByCode(code: string): Promise<CampusDestinationRecord | null>;
   searchBuildingRooms(
     buildingId: string,
@@ -94,6 +106,17 @@ export interface UserLocation {
   longitude: number;
 }
 
+export interface IndoorDoorPose {
+  mapCode: string;
+  frame: 'multiset-mapset';
+  doorKey: string;
+  floor: string;
+  position: { x: number; y: number; z: number };
+  headingDeg: number;
+}
+
+export type IndoorSkipReason = 'missing-heading';
+
 export interface PublicCampusResult {
   id: string;
   type: CampusDestinationType | 'housing' | 'external';
@@ -111,6 +134,7 @@ export interface PublicCampusResult {
     indoorDestinationId?: string;
     arrivalRadiusMeters?: number;
   };
+  indoor?: IndoorDoorPose;
 }
 
 export interface CampusSearchResponse {

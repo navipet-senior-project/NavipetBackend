@@ -21,6 +21,21 @@ const OutdoorDestinationSchema = Type.Object(
   { additionalProperties: false },
 );
 
+const IndoorDoorPoseSchema = Type.Object(
+  {
+    mapCode: Type.String({ minLength: 1 }),
+    frame: Type.Literal('multiset-mapset'),
+    doorKey: Type.String({ minLength: 1 }),
+    floor: Type.String({ minLength: 1 }),
+    position: Type.Object(
+      { x: Type.Number(), y: Type.Number(), z: Type.Number() },
+      { additionalProperties: false },
+    ),
+    headingDeg: Type.Number({ minimum: 0, exclusiveMaximum: 360 }),
+  },
+  { additionalProperties: false },
+);
+
 export const PublicCampusResultSchema = Type.Object(
   {
     id: Type.String(),
@@ -34,6 +49,7 @@ export const PublicCampusResultSchema = Type.Object(
     external: Type.Optional(Type.Literal(true)),
     attribution: Type.Optional(Type.String()),
     distanceMeters: Type.Optional(Type.Integer({ minimum: 0 })),
+    indoor: Type.Optional(IndoorDoorPoseSchema),
     navigation: Type.Optional(
       Type.Object(
         {

@@ -49,6 +49,19 @@ import type {
   UpdateProfileInput,
 } from '../modules/profiles/profiles.types.js';
 
+export const indoorDoorColumns = 'point_key,map_code,frame,floor,x,y,z,heading_deg';
+
+interface IndoorDoorRow {
+  point_key: string;
+  map_code: string;
+  frame: 'multiset-mapset';
+  floor: string;
+  x: number;
+  y: number;
+  z: number;
+  heading_deg: number | null;
+}
+
 const noSession = {
   auth: {
     autoRefreshToken: false,
@@ -744,6 +757,30 @@ export function createSupabaseResources(config: Environment): SupabaseResources 
         mapCampusDestination(data as unknown as CampusDestinationRow),
       ]);
       return place ?? null;
+    },
+    async findIndoorDoorPoint(destinationId) {
+      if (adminClient === null) return null;
+      // At most one row: vec_destination_points has a unique index on
+      // destination_id where active.
+      const { data, error } = (await adminClient
+        .from('vec_destination_points')
+        .select(indoorDoorColumns)
+        .eq('destination_id', destinationId)
+        .eq('active', true)
+        .limit(1)) as unknown as { data: IndoorDoorRow[] | null; error: Error | null };
+      if (error !== null) throw error;
+      const [row] = data ?? [];
+      if (row === undefined) return null;
+      return {
+        doorKey: row.point_key,
+        mapCode: row.map_code,
+        frame: row.frame,
+        floor: row.floor,
+        x: row.x,
+        y: row.y,
+        z: row.z,
+        headingDeg: row.heading_deg,
+      };
     },
     async findBuildingByCode(code) {
       const { data, error } = await publicClient

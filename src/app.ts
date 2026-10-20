@@ -1,11 +1,20 @@
 import { randomUUID } from 'node:crypto';
+import pretty from 'pino-pretty';
 import Fastify, {
+  LogController,
   type FastifyInstance,
+  type FastifyRequest,
   type FastifyServerOptions,
 } from 'fastify';
 import { TypeBoxValidatorCompiler } from '@fastify/type-provider-typebox';
 
 import { parseEnv, type Environment } from './config/env.js';
+import {
+  getLoggerOptions,
+  getPrettyOptions,
+  formatDuration,
+  requestLogUrl,
+} from './config/logging.js';
 import authRoutes from './modules/auth/auth.routes.js';
 import healthRoutes from './modules/health/health.routes.js';
 import campusRoutes from './modules/campus/campus.routes.js';
@@ -18,7 +27,8 @@ import authPlugin, {
   type JwtVerifier,
 } from './plugins/auth.js';
 import corsPlugin from './plugins/cors.js';
-import errorHandlerPlugin from './plugins/error-handler.js';
+import errorHandlerPlugin, { appErrorLogFields } from './plugins/error-handler.js';
+import { AppError } from './common/errors/app-error.js';
 import rateLimitPlugin from './plugins/rate-limit.js';
 import mapboxSearchPlugin from './plugins/mapbox-search.js';
 import type { ExternalPlacesGateway } from './modules/campus/campus.types.js';
@@ -39,37 +49,52 @@ export async function buildApp(
   options: BuildAppOptions = {},
 ): Promise<FastifyInstance> {
   const config = options.env ?? parseEnv(process.env);
+  const prettyLogging = config.LOG_PRETTY && options.logger === undefined;
   const app = Fastify({
     bodyLimit: config.BODY_LIMIT_BYTES,
     genReqId: () => randomUUID(),
-    logger:
-      options.logger ??
-      {
-        level: config.LOG_LEVEL,
-        redact: {
-          paths: [
-            'req.headers.authorization',
-            'req.headers.cookie',
-            'SUPABASE_ANON_KEY',
-            'SUPABASE_SERVICE_ROLE_KEY',
-            'RESEND_API_KEY',
-            'MULTISET_API_KEY',
-            'MAPBOX_ACCESS_TOKEN',
-          ],
-          censor: '[REDACTED]',
-        },
-      },
+    ...(prettyLogging
+      ? { logController: new LogController({ disableRequestLogging: true }) }
+      : {}),
+    logger: options.logger ?? {
+      ...getLoggerOptions(config),
+      ...(config.LOG_PRETTY
+        ? { stream: pretty(getPrettyOptions(config, process.stdout.isTTY)) }
+        : {}),
+    },
   });
 
   app.setValidatorCompiler(TypeBoxValidatorCompiler);
   app.decorate('config', config);
+  if (prettyLogging) {
+    const errors = new WeakMap<FastifyRequest, Error>();
+    app.addHook('onError', (request, _reply, error, done) => {
+      errors.set(request, error);
+      done();
+    });
+    app.addHook('onResponse', (request, reply, done) => {
+      const error = errors.get(request);
+      const fields = error === undefined ? {} : {
+        ...(error instanceof AppError
+          ? appErrorLogFields(error, config.NODE_ENV === 'development')
+          : { errorName: error.name, statusCode: reply.statusCode }),
+        err: { type: error.name, message: error.message, stack: error.stack },
+      };
+      const message = `${request.method} ${requestLogUrl(request.url)} ${String(reply.statusCode)} ${formatDuration(reply.elapsedTime)}`;
+      if (reply.statusCode >= 500) request.log.error(fields, message);
+      else if (reply.statusCode >= 400) request.log.warn(fields, message);
+      else request.log.info(fields, message);
+      done();
+    });
+  }
+
   const supabaseOptions = {
     ...(options.supabaseResources === undefined
       ? {}
       : { resources: options.supabaseResources }),
   };
 
-  await app.register(errorHandlerPlugin);
+  await app.register(errorHandlerPlugin, { prettyRequestLogging: prettyLogging });
   await app.register(corsPlugin);
   await app.register(rateLimitPlugin);
   await app.register(swaggerPlugin);

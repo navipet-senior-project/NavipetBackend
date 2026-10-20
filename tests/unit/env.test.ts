@@ -182,4 +182,18 @@ describe('parseEnv', () => {
     ).toThrow('Invalid environment configuration');
   });
 
+  it.each([
+    ['development', undefined, true],
+    ['production', undefined, false],
+    ['test', undefined, false],
+    ['development', 'false', false],
+    ['production', 'true', true],
+    ['test', 'true', true],
+  ])('parses LOG_PRETTY for %s with override %s', (nodeEnv, pretty, expected) => {
+    expect(parseEnv({ ...required, NODE_ENV: nodeEnv, LOG_PRETTY: pretty }).LOG_PRETTY).toBe(expected);
+  });
+
+  it('rejects invalid LOG_PRETTY', () => {
+    expect(() => parseEnv({ ...required, LOG_PRETTY: 'sometimes' })).toThrow('Invalid environment configuration');
+  });
 });
