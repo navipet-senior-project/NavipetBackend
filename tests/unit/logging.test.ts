@@ -25,4 +25,15 @@ describe('logger configuration', () => {
     expect(url).not.toContain('hidden');
     expect(url).toContain('q=ok');
   });
+  it.each(['lat', 'latitude', 'lng', 'lon', 'longitude', 'location'])('redacts %s on every route', (key) => {
+    const result = requestLogUrl(`/health?q=ok&${key}=precise-location`);
+    expect(result).not.toContain('precise-location');
+    expect(result).toContain('q=ok');
+  });
+  it('redacts room-query coordinates while retaining the room query', () => {
+    const result = requestLogUrl('/buildings/vec/rooms?q=1&latitude=33&longitude=-118');
+    expect(result).not.toContain('=33');
+    expect(result).not.toContain('-118');
+    expect(result).toContain('q=1');
+  });
 });

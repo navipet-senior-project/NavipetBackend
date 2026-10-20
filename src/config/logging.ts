@@ -49,7 +49,7 @@ export function requestLogUrl(url: string): string {
     return '/autocomplete?[REDACTED]';
   }
   for (const key of [...parsed.searchParams.keys()]) {
-    if (/token|password|authorization|cookie|secret|api.?key|otp|code/i.test(key)) {
+    if (/token|password|authorization|cookie|secret|api.?key|otp|code|^(?:lat|latitude|lng|lon|longitude|location)$/i.test(key)) {
       parsed.searchParams.set(key, '[REDACTED]');
     }
   }

@@ -27,7 +27,8 @@ import authPlugin, {
   type JwtVerifier,
 } from './plugins/auth.js';
 import corsPlugin from './plugins/cors.js';
-import errorHandlerPlugin from './plugins/error-handler.js';
+import errorHandlerPlugin, { appErrorLogFields } from './plugins/error-handler.js';
+import { AppError } from './common/errors/app-error.js';
 import rateLimitPlugin from './plugins/rate-limit.js';
 import mapboxSearchPlugin from './plugins/mapbox-search.js';
 import type { ExternalPlacesGateway } from './modules/campus/campus.types.js';
@@ -48,10 +49,11 @@ export async function buildApp(
   options: BuildAppOptions = {},
 ): Promise<FastifyInstance> {
   const config = options.env ?? parseEnv(process.env);
+  const prettyLogging = config.LOG_PRETTY && options.logger === undefined;
   const app = Fastify({
     bodyLimit: config.BODY_LIMIT_BYTES,
     genReqId: () => randomUUID(),
-    ...(config.LOG_PRETTY
+    ...(prettyLogging
       ? { logController: new LogController({ disableRequestLogging: true }) }
       : {}),
     logger: options.logger ?? {
@@ -64,7 +66,7 @@ export async function buildApp(
 
   app.setValidatorCompiler(TypeBoxValidatorCompiler);
   app.decorate('config', config);
-  if (config.LOG_PRETTY) {
+  if (prettyLogging) {
     const errors = new WeakMap<FastifyRequest, Error>();
     app.addHook('onError', (request, _reply, error, done) => {
       errors.set(request, error);
@@ -73,6 +75,9 @@ export async function buildApp(
     app.addHook('onResponse', (request, reply, done) => {
       const error = errors.get(request);
       const fields = error === undefined ? {} : {
+        ...(error instanceof AppError
+          ? appErrorLogFields(error, config.NODE_ENV === 'development')
+          : { errorName: error.name, statusCode: reply.statusCode }),
         err: { type: error.name, message: error.message, stack: error.stack },
       };
       const message = `${request.method} ${requestLogUrl(request.url)} ${String(reply.statusCode)} ${formatDuration(reply.elapsedTime)}`;
@@ -89,7 +94,7 @@ export async function buildApp(
       : { resources: options.supabaseResources }),
   };
 
-  await app.register(errorHandlerPlugin);
+  await app.register(errorHandlerPlugin, { prettyRequestLogging: prettyLogging });
   await app.register(corsPlugin);
   await app.register(rateLimitPlugin);
   await app.register(swaggerPlugin);

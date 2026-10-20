@@ -44,6 +44,21 @@ function causeShape(cause: unknown): { causeType: string; causeKeys?: string[]; 
   return { causeType: typeof cause };
 }
 
+// Shared by JSON error logs and the pretty request summary, so diagnostics agree.
+export function appErrorLogFields(error: AppError, development: boolean) {
+  const upstreamCause = error.originalCause ?? error.cause;
+  const upstreamMessage = development
+    ? causeMessage(upstreamCause) ?? error.message
+    : undefined;
+  return {
+    errorCode: error.code,
+    errorName: error.name,
+    statusCode: error.statusCode,
+    ...(upstreamMessage === undefined ? {} : { upstreamMessage }),
+    ...(development ? causeShape(upstreamCause) : {}),
+  };
+}
+
 function body(code: string, message: string, requestId: string): ErrorBody {
   return { error: { code, message, requestId } };
 }
@@ -54,7 +69,7 @@ const invalidRequestParserCodes = new Set([
   'FST_ERR_CTP_INVALID_JSON_BODY',
 ]);
 
-const errorHandlerPlugin: FastifyPluginCallback = (fastify, _options, done) => {
+const errorHandlerPlugin: FastifyPluginCallback<{ prettyRequestLogging?: boolean }> = (fastify, options, done) => {
   fastify.setNotFoundHandler((request, reply) => {
     return reply
       .status(404)
@@ -96,23 +111,12 @@ const errorHandlerPlugin: FastifyPluginCallback = (fastify, _options, done) => {
 
     if (error instanceof AppError) {
       if (error.statusCode >= 500) {
-        const upstreamCause = error.originalCause ?? error.cause;
-        const upstreamMessage =
-          fastify.config.NODE_ENV === 'development'
-            ? causeMessage(upstreamCause) ?? error.message
-            : undefined;
-        if (!fastify.config.LOG_PRETTY) request.log.error(
-          {
-            errorCode: error.code,
-            errorName: error.name,
-            statusCode: error.statusCode,
-            ...(upstreamMessage === undefined ? {} : { upstreamMessage }),
-            ...(fastify.config.NODE_ENV === 'development'
-              ? causeShape(upstreamCause)
-              : {}),
-          },
-          'Application request failed',
-        );
+        if (!options.prettyRequestLogging) {
+          request.log.error(
+            appErrorLogFields(error, fastify.config.NODE_ENV === 'development'),
+            'Application request failed',
+          );
+        }
         return reply.status(error.statusCode).send(
           body(
             ErrorCode.INTERNAL_ERROR,
@@ -127,7 +131,7 @@ const errorHandlerPlugin: FastifyPluginCallback = (fastify, _options, done) => {
         .send({ error: { ...error.details, ...errorBody.error } });
     }
 
-    if (!fastify.config.LOG_PRETTY) {
+    if (!options.prettyRequestLogging) {
       request.log.error({ errorName: error.name }, 'Unhandled request failure');
     }
     return reply.status(500).send(
