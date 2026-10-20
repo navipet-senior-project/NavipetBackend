@@ -101,7 +101,7 @@ const errorHandlerPlugin: FastifyPluginCallback = (fastify, _options, done) => {
           fastify.config.NODE_ENV === 'development'
             ? causeMessage(upstreamCause) ?? error.message
             : undefined;
-        request.log.error(
+        if (!fastify.config.LOG_PRETTY) request.log.error(
           {
             errorCode: error.code,
             errorName: error.name,
@@ -127,7 +127,9 @@ const errorHandlerPlugin: FastifyPluginCallback = (fastify, _options, done) => {
         .send({ error: { ...error.details, ...errorBody.error } });
     }
 
-    request.log.error({ errorName: error.name }, 'Unhandled request failure');
+    if (!fastify.config.LOG_PRETTY) {
+      request.log.error({ errorName: error.name }, 'Unhandled request failure');
+    }
     return reply.status(500).send(
       body(ErrorCode.INTERNAL_ERROR, 'Internal server error', request.id),
     );

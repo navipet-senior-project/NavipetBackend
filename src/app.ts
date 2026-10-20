@@ -1,11 +1,20 @@
 import { randomUUID } from 'node:crypto';
+import pretty from 'pino-pretty';
 import Fastify, {
+  LogController,
   type FastifyInstance,
+  type FastifyRequest,
   type FastifyServerOptions,
 } from 'fastify';
 import { TypeBoxValidatorCompiler } from '@fastify/type-provider-typebox';
 
 import { parseEnv, type Environment } from './config/env.js';
+import {
+  getLoggerOptions,
+  getPrettyOptions,
+  formatDuration,
+  requestLogUrl,
+} from './config/logging.js';
 import authRoutes from './modules/auth/auth.routes.js';
 import healthRoutes from './modules/health/health.routes.js';
 import campusRoutes from './modules/campus/campus.routes.js';
@@ -42,27 +51,38 @@ export async function buildApp(
   const app = Fastify({
     bodyLimit: config.BODY_LIMIT_BYTES,
     genReqId: () => randomUUID(),
-    logger:
-      options.logger ??
-      {
-        level: config.LOG_LEVEL,
-        redact: {
-          paths: [
-            'req.headers.authorization',
-            'req.headers.cookie',
-            'SUPABASE_ANON_KEY',
-            'SUPABASE_SERVICE_ROLE_KEY',
-            'RESEND_API_KEY',
-            'MULTISET_API_KEY',
-            'MAPBOX_ACCESS_TOKEN',
-          ],
-          censor: '[REDACTED]',
-        },
-      },
+    ...(config.LOG_PRETTY
+      ? { logController: new LogController({ disableRequestLogging: true }) }
+      : {}),
+    logger: options.logger ?? {
+      ...getLoggerOptions(config),
+      ...(config.LOG_PRETTY
+        ? { stream: pretty(getPrettyOptions(config, process.stdout.isTTY)) }
+        : {}),
+    },
   });
 
   app.setValidatorCompiler(TypeBoxValidatorCompiler);
   app.decorate('config', config);
+  if (config.LOG_PRETTY) {
+    const errors = new WeakMap<FastifyRequest, Error>();
+    app.addHook('onError', (request, _reply, error, done) => {
+      errors.set(request, error);
+      done();
+    });
+    app.addHook('onResponse', (request, reply, done) => {
+      const error = errors.get(request);
+      const fields = error === undefined ? {} : {
+        err: { type: error.name, message: error.message, stack: error.stack },
+      };
+      const message = `${request.method} ${requestLogUrl(request.url)} ${String(reply.statusCode)} ${formatDuration(reply.elapsedTime)}`;
+      if (reply.statusCode >= 500) request.log.error(fields, message);
+      else if (reply.statusCode >= 400) request.log.warn(fields, message);
+      else request.log.info(fields, message);
+      done();
+    });
+  }
+
   const supabaseOptions = {
     ...(options.supabaseResources === undefined
       ? {}

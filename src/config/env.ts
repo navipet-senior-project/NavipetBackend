@@ -39,6 +39,7 @@ const EnvironmentSchema = Type.Object(
       Type.Literal('trace'),
       Type.Literal('silent'),
     ]),
+    LOG_PRETTY: Type.Boolean(),
     BODY_LIMIT_BYTES: Type.Integer({ minimum: 1 }),
     RATE_LIMIT_MAX: Type.Integer({ minimum: 1 }),
     RATE_LIMIT_WINDOW: Type.String({ minLength: 1 }),
@@ -182,6 +183,7 @@ export function parseEnv(input: RawEnvironment): Environment {
     PORT: parseInteger(input.PORT, 3000),
     HOST: input.HOST ?? '0.0.0.0',
     LOG_LEVEL: input.LOG_LEVEL ?? 'info',
+    LOG_PRETTY: parseOptionalBoolean(input.LOG_PRETTY, nodeEnv === 'development'),
     BODY_LIMIT_BYTES: parseInteger(
       input.BODY_LIMIT_BYTES,
       DEFAULT_BODY_LIMIT_BYTES,

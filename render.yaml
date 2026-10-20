@@ -20,6 +20,8 @@ services:
         value: '22'
       - key: NODE_ENV
         value: production
+      - key: LOG_PRETTY
+        value: 'true'
       - key: HOST
         value: 0.0.0.0
       # PORT is injected by Render; do not set it here.

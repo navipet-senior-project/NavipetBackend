@@ -8,6 +8,7 @@ export const TEST_ENV: Environment = Object.freeze({
   PORT: 3000,
   HOST: '127.0.0.1',
   LOG_LEVEL: 'silent',
+  LOG_PRETTY: false,
   BODY_LIMIT_BYTES: 1_048_576,
   RATE_LIMIT_MAX: 250,
   RATE_LIMIT_WINDOW: '1 hour',
