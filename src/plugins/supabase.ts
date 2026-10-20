@@ -54,7 +54,7 @@ export const indoorDoorColumns = 'point_key,map_code,frame,floor,x,y,z,heading_d
 interface IndoorDoorRow {
   point_key: string;
   map_code: string;
-  frame: string;
+  frame: 'multiset-mapset';
   floor: string;
   x: number;
   y: number;

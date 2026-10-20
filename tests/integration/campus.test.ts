@@ -640,4 +640,145 @@ describe('campus routes', () => {
 
     expect(searchDestinations).not.toHaveBeenCalled();
   });
+  describe('indoor door pose', () => {
+    const door = {
+      doorKey: 'VEC119',
+      mapCode: 'MSET_XTBY7AM7ZK77',
+      frame: 'multiset-mapset',
+      floor: '1',
+      x: -5.7651,
+      y: -1.8186,
+      z: 22.6689,
+      headingDeg: 185.36,
+    };
+    const room = destination({
+      id: ids.room,
+      type: 'room',
+      name: 'VEC 119',
+      code: 'VEC-119',
+      buildingCode: 'VEC',
+      roomNumber: '119',
+      latitude: 33.7823,
+      longitude: -118.1107,
+      indoorDestinationId: 'VEC119',
+    });
+
+    it('returns the door pose on place detail', async () => {
+      app = await buildTestApp({}, {
+        authVerifier: verifier(),
+        supabaseResources: resources({
+          findPlaceById: vi.fn().mockResolvedValue(room),
+          findIndoorDoorPoint: vi.fn().mockResolvedValue(door),
+        }),
+        externalPlaces: noExternal(),
+      });
+
+      const response = await app.inject({
+        method: 'GET', headers: authorization, url: `/places/${ids.room}`,
+      });
+
+      expect(response.statusCode).toBe(200);
+      const { place } = response.json<{ place: PublicCampusResult }>();
+      expect(place.indoor).toEqual({
+        mapCode: 'MSET_XTBY7AM7ZK77',
+        frame: 'multiset-mapset',
+        doorKey: 'VEC119',
+        floor: '1',
+        position: { x: -5.7651, y: -1.8186, z: 22.6689 },
+        headingDeg: 185.36,
+      });
+    });
+
+    it('omits indoor for a door without a heading', async () => {
+      let output = '';
+      const stream = new Writable({
+        write(chunk: Buffer, _encoding, callback) {
+          output += chunk.toString();
+          callback();
+        },
+      });
+      app = await buildApp({
+        env: TEST_ENV,
+        logger: { level: 'warn', stream },
+        authVerifier: verifier(),
+        supabaseResources: resources({
+          findPlaceById: vi.fn().mockResolvedValue(room),
+          findIndoorDoorPoint: vi.fn().mockResolvedValue({ ...door, headingDeg: null }),
+        }),
+        externalPlaces: noExternal(),
+      });
+
+      const response = await app.inject({
+        method: 'GET', headers: authorization, url: `/places/${ids.room}`,
+      });
+
+      expect(response.statusCode).toBe(200);
+      const { place } = response.json<{ place: PublicCampusResult }>();
+      expect(place).not.toHaveProperty('indoor');
+      expect(place.navigation?.indoorDestinationId).toBe('VEC119');
+      const logs = output.trim().split('\n').filter(Boolean).map((line) => JSON.parse(line) as Record<string, unknown>);
+      expect(logs).toContainEqual(expect.objectContaining({
+        level: 40, placeId: ids.room, doorKey: 'VEC119', reason: 'missing-heading',
+        msg: 'indoor door pose omitted',
+      }));
+    });
+
+    it('omits indoor on place detail when no active door exists', async () => {
+      app = await buildTestApp({}, {
+        authVerifier: verifier(),
+        supabaseResources: resources({
+          findPlaceById: vi.fn().mockResolvedValue(room),
+          findIndoorDoorPoint: vi.fn().mockResolvedValue(null),
+        }),
+        externalPlaces: noExternal(),
+      });
+      const response = await app.inject({
+        method: 'GET', headers: authorization, url: `/places/${ids.room}`,
+      });
+      expect(response.statusCode).toBe(200);
+      expect(response.json<{ place: PublicCampusResult }>().place).not.toHaveProperty('indoor');
+    });
+
+    it('answers 502 when the door lookup fails', async () => {
+      app = await buildTestApp({}, {
+        authVerifier: verifier(),
+        supabaseResources: resources({
+          findPlaceById: vi.fn().mockResolvedValue(room),
+          findIndoorDoorPoint: vi.fn().mockRejectedValue(new Error('db down')),
+        }),
+        externalPlaces: noExternal(),
+      });
+
+      const response = await app.inject({
+        method: 'GET', headers: authorization, url: `/places/${ids.room}`,
+      });
+
+      expect(response.statusCode).toBe(502);
+    });
+
+    it.each(['/autocomplete?q=VEC', '/buildings/VEC/rooms?q=119'])(
+      'does not look up doors on %s', async (url) => {
+        const findDoor = vi.fn().mockResolvedValue(door);
+        const building = destination({ code: 'VEC', buildingCode: 'VEC', name: 'Vivian Engineering Center' });
+        app = await buildTestApp({}, {
+          authVerifier: verifier(),
+          supabaseResources: resources({
+            searchDestinations: vi.fn().mockResolvedValue([room]),
+            findBuildingByCode: vi.fn().mockResolvedValue(building),
+            searchBuildingRooms: vi.fn().mockResolvedValue([room]),
+            findIndoorDoorPoint: findDoor,
+          }),
+          externalPlaces: noExternal(),
+        });
+
+        const response = await app.inject({ method: 'GET', headers: authorization, url });
+
+        expect(response.statusCode).toBe(200);
+        expect(findDoor).not.toHaveBeenCalled();
+        const { results } = response.json<{ results: PublicCampusResult[] }>();
+        expect(results[0]).not.toHaveProperty('indoor');
+      },
+    );
+  });
+
 });

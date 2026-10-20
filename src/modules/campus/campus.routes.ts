@@ -99,7 +99,15 @@ const campusRoutes: FastifyPluginCallbackTypebox = (fastify, _options, done) => 
     async (request) => {
       let place;
       try {
-        place = await service.findPlace(request.params.placeId);
+        place = await service.findPlaceDetail(
+          request.params.placeId,
+          (reason, doorKey) => {
+            request.log.warn(
+              { placeId: request.params.placeId, doorKey, reason },
+              'indoor door pose omitted',
+            );
+          },
+        );
       } catch (cause) {
         throw new AppError({
           code: ErrorCode.UPSTREAM_ERROR,

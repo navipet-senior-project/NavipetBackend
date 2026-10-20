@@ -730,6 +730,7 @@ describe('campus autocomplete service', () => {
 
     expect(result).toMatchObject({ proximity: { intent, status: 'ok' }, results: [] });
   });
+
   describe('findPlaceDetail', () => {
     const verified = { latitude: 33.7823, longitude: -118.1107 };
     const door = {
@@ -820,5 +821,4 @@ describe('campus autocomplete service', () => {
       await expect(createCampusService(deps).findPlaceDetail(room.id)).rejects.toThrow('db down');
     });
   });
-
 });

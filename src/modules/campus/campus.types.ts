@@ -45,7 +45,7 @@ export interface ExternalPlaceRecord {
 export interface IndoorDoorPointRecord {
   doorKey: string;
   mapCode: string;
-  frame: string;
+  frame: 'multiset-mapset';
   floor: string;
   x: number;
   y: number;
@@ -108,7 +108,7 @@ export interface UserLocation {
 
 export interface IndoorDoorPose {
   mapCode: string;
-  frame: string;
+  frame: 'multiset-mapset';
   doorKey: string;
   floor: string;
   position: { x: number; y: number; z: number };
