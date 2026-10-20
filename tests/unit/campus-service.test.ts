@@ -49,6 +49,7 @@ function gateways(records: CampusDestinationRecord[]): {
       searchCategoryDestinations: vi.fn().mockResolvedValue(records),
       listProximityDestinations: vi.fn().mockResolvedValue(records),
       findPlaceById: vi.fn().mockResolvedValue(null),
+      findIndoorDoorPoint: vi.fn().mockResolvedValue(null),
       findBuildingByCode: vi.fn().mockResolvedValue(null),
       searchBuildingRooms: vi.fn().mockResolvedValue([]),
       searchBuildingChildren: vi.fn().mockResolvedValue([]),

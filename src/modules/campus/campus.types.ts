@@ -42,6 +42,17 @@ export interface ExternalPlaceRecord {
   attribution?: string;
 }
 
+export interface IndoorDoorPointRecord {
+  doorKey: string;
+  mapCode: string;
+  frame: string;
+  floor: string;
+  x: number;
+  y: number;
+  z: number;
+  headingDeg: number | null;
+}
+
 export interface CampusPlacesGateway {
   searchDestinations(query: string, limit: number): Promise<CampusDestinationRecord[]>;
   searchCategoryDestinations(
@@ -50,6 +61,7 @@ export interface CampusPlacesGateway {
   ): Promise<CampusDestinationRecord[]>;
   listProximityDestinations(): Promise<CampusDestinationRecord[]>;
   findPlaceById(id: string): Promise<CampusDestinationRecord | null>;
+  findIndoorDoorPoint(destinationId: string): Promise<IndoorDoorPointRecord | null>;
   findBuildingByCode(code: string): Promise<CampusDestinationRecord | null>;
   searchBuildingRooms(
     buildingId: string,

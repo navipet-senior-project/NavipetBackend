@@ -144,3 +144,78 @@ describe('campus indoor references', () => {
     expect(fetchSpy).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('indoor door point lookup', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  const vec119Door = {
+    point_key: 'VEC119',
+    map_code: 'MSET_XTBY7AM7ZK77',
+    frame: 'multiset-mapset',
+    floor: '1',
+    x: -5.7651,
+    y: -1.8186,
+    z: 22.6689,
+    heading_deg: 185.36,
+  };
+
+  it('reads the active door for one destination', async () => {
+    const fetchSpy = routeFetch({ [doorsPath]: () => jsonResponse([vec119Door]) });
+
+    const door = await createSupabaseResources(env).findIndoorDoorPoint(vec119Id);
+
+    expect(door).toEqual({
+      doorKey: 'VEC119',
+      mapCode: 'MSET_XTBY7AM7ZK77',
+      frame: 'multiset-mapset',
+      floor: '1',
+      x: -5.7651,
+      y: -1.8186,
+      z: 22.6689,
+      headingDeg: 185.36,
+    });
+    const query = requestTo(fetchSpy, doorsPath).searchParams;
+    expect(query.get('select')).toBe('point_key,map_code,frame,floor,x,y,z,heading_deg');
+    expect(query.get('destination_id')).toBe(`eq.${vec119Id}`);
+    expect(query.get('active')).toBe('eq.true');
+    expect(query.get('limit')).toBe('1');
+  });
+
+  it('passes a null heading through for the service to reject', async () => {
+    routeFetch({ [doorsPath]: () => jsonResponse([{ ...vec119Door, heading_deg: null }]) });
+
+    const door = await createSupabaseResources(env).findIndoorDoorPoint(vec119Id);
+
+    expect(door?.headingDeg).toBeNull();
+  });
+
+  it('returns null when the destination has no active door', async () => {
+    routeFetch({ [doorsPath]: () => jsonResponse([]) });
+
+    await expect(
+      createSupabaseResources(env).findIndoorDoorPoint(vec119Id),
+    ).resolves.toBeNull();
+  });
+
+  it('fails when door points cannot be read', async () => {
+    routeFetch({
+      [doorsPath]: () =>
+        jsonResponse({ code: '42703', message: 'column vec_destination_points.nope does not exist' }, 400),
+    });
+
+    await expect(
+      createSupabaseResources(env).findIndoorDoorPoint(vec119Id),
+    ).rejects.toMatchObject({ code: '42703' });
+  });
+
+  it('returns null without a request when no service role key is configured', async () => {
+    const fetchSpy = routeFetch({});
+
+    await expect(
+      createSupabaseResources(TEST_ENV).findIndoorDoorPoint(vec119Id),
+    ).resolves.toBeNull();
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+});
