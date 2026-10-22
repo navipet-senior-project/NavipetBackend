@@ -211,6 +211,65 @@ describe('campus routes', () => {
     );
   });
 
+  describe('building footprint', () => {
+    const footprint = {
+      type: 'Polygon' as const,
+      coordinates: [[
+        [-118.1142, 33.7837],
+        [-118.114, 33.7837],
+        [-118.114, 33.7839],
+        [-118.1142, 33.7837],
+      ]] as [number, number][][],
+    };
+
+    it.each([
+      { label: 'stored', latitude: 33.7838, longitude: -118.1141 },
+      { label: 'derived', latitude: null, longitude: null },
+    ])('emits the footprint with $label coordinates', async (coordinates) => {
+      const record = destination({
+        ...coordinates,
+        metadata: { categories: ['building'], footprint },
+      });
+      app = await buildTestApp({}, {
+        authVerifier: verifier(),
+        supabaseResources: resources({ findPlaceById: vi.fn().mockResolvedValue(record) }),
+        externalPlaces: { searchExternalPlaces: vi.fn().mockResolvedValue([{
+          id: 'mapbox.cob', name: 'College of Business', description: 'CSULB',
+          latitude: 33.7838, longitude: -118.1141,
+        }]) },
+      });
+
+      const response = await app.inject({
+        method: 'GET', headers: authorization, url: `/places/${ids.cob}`,
+      });
+
+      expect(response.statusCode).toBe(200);
+      const { place } = response.json<{ place: PublicCampusResult }>();
+      expect(place.navigation?.footprint).toEqual(footprint);
+    });
+
+    it('omits a malformed footprint', async () => {
+      const record = destination({
+        latitude: 33.7838,
+        longitude: -118.1141,
+        metadata: { footprint: { type: 'Polygon', coordinates: [[[-118.1, 33.7]]] } },
+      });
+      app = await buildTestApp({}, {
+        authVerifier: verifier(),
+        supabaseResources: resources({ findPlaceById: vi.fn().mockResolvedValue(record) }),
+        externalPlaces: noExternal(),
+      });
+
+      const response = await app.inject({
+        method: 'GET', headers: authorization, url: `/places/${ids.cob}`,
+      });
+
+      expect(response.statusCode).toBe(200);
+      const { place } = response.json<{ place: PublicCampusResult }>();
+      expect(place.navigation).not.toHaveProperty('footprint');
+    });
+  });
+
   it.each([
     ['COB', 'College of Business'],
     ['cob', 'College of Business'],
