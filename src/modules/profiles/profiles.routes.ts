@@ -1,4 +1,4 @@
-import multipart, { type Multipart, type MultipartFile } from '@fastify/multipart';
+import multipart from '@fastify/multipart';
 import type { FastifyPluginAsyncTypebox } from '@fastify/type-provider-typebox';
 import type { FastifyRequest } from 'fastify';
 
@@ -79,20 +79,18 @@ async function readMultipartProfileUpdate(request: FastifyRequest): Promise<Pars
   try {
     for await (const part of request.parts()) {
       if (part.type === 'file') {
-        const file = part as MultipartFile;
-        if (file.fieldname !== AVATAR_FIELD_NAME || avatarBytes !== undefined) {
+        if (part.fieldname !== AVATAR_FIELD_NAME || avatarBytes !== undefined) {
           throw validationError(`Send no more than one file in the "${AVATAR_FIELD_NAME}" field.`, 400);
         }
-        avatarBytes = await file.toBuffer();
+        avatarBytes = await part.toBuffer();
       } else {
-        const field = part as Extract<Multipart, { type: 'field' }>;
-        if (field.fieldname === AVATAR_FIELD_NAME) {
+        if (part.fieldname === AVATAR_FIELD_NAME) {
           throw validationError('The avatar field must contain an image file.', 400);
         }
-        if (Object.hasOwn(fields, field.fieldname)) {
-          throw validationError(`Duplicate profile field: ${field.fieldname}.`, 400);
+        if (Object.hasOwn(fields, part.fieldname)) {
+          throw validationError(`Duplicate profile field: ${part.fieldname}.`, 400);
         }
-        fields[field.fieldname] = field.value;
+        fields[part.fieldname] = part.value;
       }
     }
   } catch (cause) {

@@ -576,8 +576,8 @@ export function createSupabaseResources(config: Environment): SupabaseResources 
           .select('avatar_path')
           .range(offset, offset + 999);
         if (error !== null) throw error;
-        const rows = data ?? [];
-        profiles.push(...(rows as Array<{ avatar_path: string | null }>));
+        const rows = data;
+        profiles.push(...rows);
         if (rows.length < 1_000) break;
       }
       const referencedPaths = new Set(
@@ -594,7 +594,7 @@ export function createSupabaseResources(config: Environment): SupabaseResources 
             offset,
           });
           if (error !== null) throw error;
-          const entries = data ?? [];
+          const entries = data;
           for (const entry of entries) {
             const timestamp = entry.created_at ?? entry.updated_at;
             const path = typeof entry.name === 'string'
@@ -618,7 +618,7 @@ export function createSupabaseResources(config: Environment): SupabaseResources 
       for (let offset = 0; ; offset += 1_000) {
         const { data, error } = await storage.list('uploads', { limit: 1_000, offset });
         if (error !== null) throw error;
-        const entries = data ?? [];
+        const entries = data;
         uploadsUsers.push(...entries);
         if (entries.length < 1_000) break;
       }
@@ -638,7 +638,7 @@ export function createSupabaseResources(config: Environment): SupabaseResources 
       for (let offset = 0; ; offset += 1_000) {
         const { data, error } = await storage.list('', { limit: 1_000, offset });
         if (error !== null) throw error;
-        const entries = data ?? [];
+        const entries = data;
         rootEntries.push(...entries);
         if (entries.length < 1_000) break;
       }
