@@ -1,11 +1,11 @@
 import type { FastifyInstance } from 'fastify';
 
-export const PENDING_AVATAR_CLEANUP_INTERVAL_MILLISECONDS =
+export const ORPHAN_AVATAR_CLEANUP_INTERVAL_MILLISECONDS =
   24 * 60 * 60 * 1_000;
 
-export function startPendingAvatarCleanup(
+export function startOrphanAvatarCleanup(
   app: FastifyInstance,
-  intervalMilliseconds = PENDING_AVATAR_CLEANUP_INTERVAL_MILLISECONDS,
+  intervalMilliseconds = ORPHAN_AVATAR_CLEANUP_INTERVAL_MILLISECONDS,
 ): () => void {
   let running = false;
 
@@ -13,12 +13,12 @@ export function startPendingAvatarCleanup(
     if (running) return;
     running = true;
     try {
-      const deletedCount = await app.supabase.cleanupPendingProfileAvatars();
+      const deletedCount = await app.supabase.cleanupOrphanedProfileAvatars();
       if (deletedCount > 0) {
-        app.log.info({ deletedCount }, 'Removed stale pending profile avatars');
+        app.log.info({ deletedCount }, 'Removed orphaned profile avatars');
       }
     } catch (cause) {
-      app.log.warn({ cause }, 'Pending profile avatar cleanup failed');
+      app.log.warn({ cause }, 'Orphaned profile avatar cleanup failed');
     } finally {
       running = false;
     }

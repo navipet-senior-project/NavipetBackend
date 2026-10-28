@@ -1,8 +1,5 @@
-import multipart, { type MultipartFile } from '@fastify/multipart';
-import type {
-  FastifyPluginAsyncTypebox,
-  FastifyPluginCallbackTypebox,
-} from '@fastify/type-provider-typebox';
+import multipart, { type Multipart, type MultipartFile } from '@fastify/multipart';
+import type { FastifyPluginAsyncTypebox } from '@fastify/type-provider-typebox';
 import type { FastifyRequest } from 'fastify';
 
 import { AppError } from '../../common/errors/app-error.js';
@@ -10,15 +7,19 @@ import { ErrorCode } from '../../common/errors/error-codes.js';
 import { detectAvatarContentType } from './profiles.avatar.js';
 import {
   GetProfileRouteSchema,
-  DeleteAvatarRouteSchema,
-  UploadAvatarRouteSchema,
   UpdateProfileRouteSchema,
 } from './profiles.schema.js';
 import {
   AVATAR_FIELD_NAME,
   AVATAR_MAX_BYTES,
+  ProfileRoles,
   type UpdateProfileInput,
 } from './profiles.types.js';
+
+interface ParsedProfileUpdate {
+  input: UpdateProfileInput;
+  avatarBytes?: Buffer;
+}
 
 function errorCode(cause: unknown): string | undefined {
   if (typeof cause !== 'object' || cause === null || !('code' in cause)) {
@@ -27,125 +28,99 @@ function errorCode(cause: unknown): string | undefined {
   return typeof cause.code === 'string' ? cause.code : undefined;
 }
 
-// Everything that can fail while reading the multipart body is the client's
-// request, never Storage, so it maps to 4xx rather than the handler's 502.
-async function readAvatarUpload(request: FastifyRequest): Promise<Buffer> {
-  let file: MultipartFile | undefined;
+function validationError(message: string, statusCode = 422): AppError {
+  return new AppError({
+    code: ErrorCode.VALIDATION_ERROR,
+    statusCode,
+    message,
+  });
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function parseProfileFields(fields: Record<string, unknown>): UpdateProfileInput {
+  const allowed = new Set(['displayName', 'role']);
+  for (const key of Object.keys(fields)) {
+    if (!allowed.has(key)) throw validationError(`Unexpected profile field: ${key}.`);
+  }
+  if (Object.keys(fields).length === 0) {
+    throw validationError('Send at least one profile field or avatar.');
+  }
+
+  const input: UpdateProfileInput = {};
+  if (fields.displayName !== undefined) {
+    if (typeof fields.displayName !== 'string' || fields.displayName.length < 1 || fields.displayName.length > 80) {
+      throw validationError('displayName must be a string between 1 and 80 characters.');
+    }
+    const displayName = fields.displayName.trim();
+    if (displayName.length === 0) throw validationError('Display name cannot be blank.');
+    input.displayName = displayName;
+  }
+  if (fields.role !== undefined) {
+    if (typeof fields.role !== 'string' || !ProfileRoles.includes(fields.role as (typeof ProfileRoles)[number])) {
+      throw validationError('role must be student or professor.');
+    }
+    input.role = fields.role as (typeof ProfileRoles)[number];
+  }
+  return input;
+}
+
+function parseJsonProfileUpdate(body: unknown): ParsedProfileUpdate {
+  if (!isRecord(body)) throw validationError('The request body must be an object.', 400);
+  const input = parseProfileFields(body);
+  return { input };
+}
+
+async function readMultipartProfileUpdate(request: FastifyRequest): Promise<ParsedProfileUpdate> {
+  const fields: Record<string, unknown> = {};
+  let avatarBytes: Buffer | undefined;
   try {
-    file = await request.file();
-    if (file === undefined) {
-      throw new AppError({
-        code: ErrorCode.VALIDATION_ERROR,
-        statusCode: 400,
-        message: 'An image file is required.',
-      });
+    for await (const part of request.parts()) {
+      if (part.type === 'file') {
+        const file = part as MultipartFile;
+        if (file.fieldname !== AVATAR_FIELD_NAME || avatarBytes !== undefined) {
+          throw validationError(`Send no more than one file in the "${AVATAR_FIELD_NAME}" field.`, 400);
+        }
+        avatarBytes = await file.toBuffer();
+      } else {
+        const field = part as Extract<Multipart, { type: 'field' }>;
+        if (field.fieldname === AVATAR_FIELD_NAME) {
+          throw validationError('The avatar field must contain an image file.', 400);
+        }
+        if (Object.hasOwn(fields, field.fieldname)) {
+          throw validationError(`Duplicate profile field: ${field.fieldname}.`, 400);
+        }
+        fields[field.fieldname] = field.value;
+      }
     }
-    if (file.fieldname !== AVATAR_FIELD_NAME) {
-      throw new AppError({
-        code: ErrorCode.VALIDATION_ERROR,
-        statusCode: 400,
-        message: `Upload the image in the "${AVATAR_FIELD_NAME}" field.`,
-      });
-    }
-    return await file.toBuffer();
   } catch (cause) {
     if (cause instanceof AppError) throw cause;
     const code = errorCode(cause);
-    if (code === 'FST_INVALID_MULTIPART_CONTENT_TYPE') {
-      throw new AppError({
-        code: ErrorCode.VALIDATION_ERROR,
-        statusCode: 415,
-        message: 'Request must be multipart/form-data.',
-        cause,
-      });
-    }
     if (code === 'FST_REQ_FILE_TOO_LARGE') {
-      throw new AppError({
-        code: ErrorCode.VALIDATION_ERROR,
-        statusCode: 413,
-        message: 'Avatar image must be 5 MB or smaller.',
-        cause,
-      });
+      throw validationError('Avatar image must be 5 MB or smaller.', 413);
     }
-    throw new AppError({
-      code: ErrorCode.VALIDATION_ERROR,
-      statusCode: 400,
-      message: 'Malformed multipart request.',
-      cause,
-    });
+    if (code === 'FST_PARTS_LIMIT' || code === 'FST_FILES_LIMIT' || code === 'FST_FIELDS_LIMIT') {
+      throw validationError('Multipart request contains too many fields or files.', 400);
+    }
+    throw validationError('Malformed multipart request.', 400);
   }
+
+  if (Object.keys(fields).length === 0 && avatarBytes === undefined) {
+    throw validationError('Send at least one profile field or avatar.');
+  }
+  return {
+    input: Object.keys(fields).length === 0 ? {} : parseProfileFields(fields),
+    ...(avatarBytes === undefined ? {} : { avatarBytes }),
+  };
 }
 
-// Multipart parsing is registered only in this scope so no other route
+// Multipart parsing is registered only in this plugin scope so no other route
 // accepts multipart bodies.
-const avatarUploadRoutes: FastifyPluginAsyncTypebox = async (fastify) => {
+const profilesRoutes: FastifyPluginAsyncTypebox = async (fastify) => {
   await fastify.register(multipart, {
-    limits: { files: 1, fileSize: AVATAR_MAX_BYTES },
-  });
-
-  fastify.post('/profiles/me/avatar', {
-    preHandler: fastify.authenticate,
-    // The body is read by request.file(), not validated against the schema;
-    // the body schema exists only to render a file picker in Swagger UI.
-    validatorCompiler: () => () => true,
-    schema: UploadAvatarRouteSchema,
-  }, async (request) => {
-    const data = await readAvatarUpload(request);
-    const contentType = detectAvatarContentType(data);
-    if (contentType === null) {
-      throw new AppError({
-        code: ErrorCode.VALIDATION_ERROR,
-        statusCode: 415,
-        message: 'Only JPEG, PNG, and WebP images are supported.',
-      });
-    }
-    try {
-      return await fastify.supabase.uploadProfileAvatar(
-        request.user?.id as string,
-        contentType,
-        data,
-      );
-    } catch (cause) {
-      if (cause instanceof AppError) throw cause;
-      throw new AppError({
-        code: ErrorCode.UPSTREAM_ERROR,
-        statusCode: 502,
-        message: 'Profile storage unavailable.',
-        cause,
-      });
-    }
-  });
-};
-
-const profilesRoutes: FastifyPluginCallbackTypebox = (fastify, _options, done) => {
-  fastify.register(avatarUploadRoutes);
-
-  fastify.delete('/profiles/me/avatar/:uploadId', {
-    preHandler: fastify.authenticate,
-    schema: DeleteAvatarRouteSchema,
-  }, async (request, reply) => {
-    try {
-      const deleted = await fastify.supabase.discardProfileAvatar(
-        request.user?.id as string,
-        request.params.uploadId,
-      );
-      if (!deleted) {
-        throw new AppError({
-          code: ErrorCode.NOT_FOUND,
-          statusCode: 404,
-          message: 'Temporary avatar not found.',
-        });
-      }
-      return await reply.code(204).send();
-    } catch (cause) {
-      if (cause instanceof AppError) throw cause;
-      throw new AppError({
-        code: ErrorCode.UPSTREAM_ERROR,
-        statusCode: 502,
-        message: 'Profile storage unavailable.',
-        cause,
-      });
-    }
+    limits: { files: 1, fields: 2, parts: 3, fileSize: AVATAR_MAX_BYTES },
   });
 
   fastify.get('/profiles/me', {
@@ -177,22 +152,23 @@ const profilesRoutes: FastifyPluginCallbackTypebox = (fastify, _options, done) =
 
   fastify.patch('/profiles/me', {
     preHandler: fastify.authenticate,
+    // JSON and multipart payloads are parsed separately below. This keeps the
+    // OpenAPI schema useful while allowing Fastify's multipart stream parser.
+    validatorCompiler: () => () => true,
     schema: UpdateProfileRouteSchema,
   }, async (request) => {
-    const input: UpdateProfileInput = {};
-    if (request.body.displayName !== undefined) {
-      const displayName = request.body.displayName.trim();
-      if (displayName.length === 0) {
-        throw new AppError({
-          code: ErrorCode.VALIDATION_ERROR,
-          statusCode: 422,
-          message: 'Display name cannot be blank.',
-        });
+    const parsed = request.isMultipart()
+      ? await readMultipartProfileUpdate(request)
+      : parseJsonProfileUpdate(request.body);
+    const input = parsed.input;
+
+    if (parsed.avatarBytes !== undefined) {
+      const contentType = detectAvatarContentType(parsed.avatarBytes);
+      if (contentType === null) {
+        throw validationError('Only JPEG, PNG, and WebP images are supported.', 415);
       }
-      input.displayName = displayName;
+      input.avatar = { contentType, data: parsed.avatarBytes };
     }
-    if (request.body.role !== undefined) input.role = request.body.role;
-    if (request.body.avatarUploadId !== undefined) input.avatarUploadId = request.body.avatarUploadId;
 
     try {
       const profile = await fastify.supabase.updateProfile(
@@ -218,8 +194,6 @@ const profilesRoutes: FastifyPluginCallbackTypebox = (fastify, _options, done) =
       });
     }
   });
-
-  done();
 };
 
 export default profilesRoutes;

@@ -1,5 +1,3 @@
-import { randomUUID } from 'node:crypto';
-
 import {
   AuthApiError,
   createClient,
@@ -31,19 +29,16 @@ import type {
   ClassesGateway,
 } from '../modules/classes/classes.types.js';
 import {
-  committedAvatarPath,
   isOwnAvatarPath,
-  pendingAvatarPath,
   resolveAvatarPath,
-  type AvatarContentType,
+  uploadedAvatarPath,
 } from '../modules/profiles/profiles.avatar.js';
 import {
   AVATAR_BUCKET,
   AVATAR_SIGNED_URL_TTL_SECONDS,
-  PENDING_AVATAR_MAX_AGE_MILLISECONDS,
+  ORPHAN_AVATAR_GRACE_PERIOD_MILLISECONDS,
 } from '../modules/profiles/profiles.types.js';
 import type {
-  ProfileAvatarUpload,
   ProfileRecord,
   ProfileRole,
   UpdateProfileInput,
@@ -186,18 +181,12 @@ export interface UserEmailLookupGateway {
 
 export interface ProfileGateway {
   getProfileByUserId(accessToken: string): Promise<ProfileRecord | null>;
-  uploadProfileAvatar(
-    userId: string,
-    contentType: AvatarContentType,
-    data: Buffer,
-  ): Promise<ProfileAvatarUpload>;
-  discardProfileAvatar(userId: string, uploadId: string): Promise<boolean>;
   updateProfile(
     accessToken: string,
     userId: string,
     input: UpdateProfileInput,
   ): Promise<ProfileRecord | null>;
-  cleanupPendingProfileAvatars(): Promise<number>;
+  cleanupOrphanedProfileAvatars(): Promise<number>;
 }
 
 export interface RecentSearch {
@@ -286,6 +275,14 @@ export function createSupabaseResources(config: Environment): SupabaseResources 
       });
     }
     return adminClient.storage.from(AVATAR_BUCKET);
+  }
+
+  async function removeAvatarPathBestEffort(path: string): Promise<void> {
+    try {
+      await avatarStorage().remove([path]);
+    } catch {
+      // The scheduled orphan reconciliation job is the fallback.
+    }
   }
 
   async function signAvatar(path: string): Promise<string> {
@@ -489,60 +486,74 @@ export function createSupabaseResources(config: Environment): SupabaseResources 
     },
     async updateProfile(accessToken, userId, input): Promise<ProfileRecord | null> {
       const client = forAccessToken(accessToken);
-      let avatar:
-        | { pendingPath: string; committedPath: string; previousPath: string | null }
-        | undefined;
-      if (input.avatarUploadId !== undefined) {
-        const storage = avatarStorage();
-        const pendingPath = pendingAvatarPath(userId, input.avatarUploadId);
-        const pending = await storage.exists(pendingPath);
-        if (!pending.data) {
-          throw new AppError({
-            code: ErrorCode.NOT_FOUND,
-            statusCode: 404,
-            message: 'Avatar upload not found.',
-          });
-        }
+      let newAvatarPath: string | undefined;
+      let previousAvatarPath: string | null = null;
+      if (input.avatar !== undefined) {
         const current = await client
           .from('profiles')
           .select('avatar_path')
           .eq('id', userId)
           .maybeSingle();
         if (current.error !== null) throw current.error;
-        // Each commit gets its own object, so the previous avatar stays intact
-        // until the profile row points at the new one.
-        const committedPath = committedAvatarPath(userId, input.avatarUploadId);
-        const moved = await storage.move(pendingPath, committedPath);
-        if (moved.error !== null) throw moved.error;
-        avatar = {
-          pendingPath,
-          committedPath,
-          previousPath: current.data === null ? null : (current.data.avatar_path as string | null),
-        };
+        if (current.data === null) return null;
+        previousAvatarPath = current.data.avatar_path as string | null;
+
+        const storage = avatarStorage();
+        newAvatarPath = uploadedAvatarPath(userId);
+        let uploadError: Error | null;
+        try {
+          ({ error: uploadError } = await storage.upload(
+            newAvatarPath,
+            input.avatar.data,
+            { contentType: input.avatar.contentType, upsert: false },
+          ));
+        } catch (cause) {
+          await removeAvatarPathBestEffort(newAvatarPath);
+          throw cause;
+        }
+        if (uploadError !== null) {
+          // Storage may have accepted an upload even if its response was lost.
+          // Best-effort compensation keeps such ambiguous failures bounded.
+          await removeAvatarPathBestEffort(newAvatarPath);
+          throw uploadError;
+        }
       }
       const values = {
         ...(input.displayName === undefined ? {} : { display_name: input.displayName }),
         ...(input.role === undefined ? {} : { role: input.role }),
-        ...(avatar === undefined ? {} : { avatar_path: avatar.committedPath }),
+        ...(newAvatarPath === undefined ? {} : { avatar_path: newAvatarPath }),
       };
-      const { data, error } = await client
-        .from('profiles')
-        .update(values)
-        .eq('id', userId)
-        .select('display_name,email,role,avatar_path')
-        .maybeSingle();
-      if (avatar !== undefined) {
-        const storage = avatarStorage();
+      let data: {
+        display_name: string;
+        email: string | null;
+        role: ProfileRole | null;
+        avatar_path: string | null;
+      } | null;
+      let error: Error | null;
+      try {
+        ({ data, error } = await client
+          .from('profiles')
+          .update(values)
+          .eq('id', userId)
+          .select('display_name,email,role,avatar_path')
+          .maybeSingle());
+      } catch (cause) {
+        if (newAvatarPath !== undefined) await removeAvatarPathBestEffort(newAvatarPath);
+        throw cause;
+      }
+      if (newAvatarPath !== undefined) {
         if (error !== null || data === null) {
-          // Put the upload back so the client can retry or discard it.
-          await storage.move(avatar.committedPath, avatar.pendingPath);
+          // The profile did not commit. Remove the just-uploaded object so the
+          // client can retry with its in-session copy of the file.
+          await removeAvatarPathBestEffort(newAvatarPath);
         } else if (
-          avatar.previousPath !== null &&
-          avatar.previousPath !== avatar.committedPath &&
-          isOwnAvatarPath(userId, avatar.previousPath)
+          previousAvatarPath !== null &&
+          previousAvatarPath !== newAvatarPath &&
+          isOwnAvatarPath(userId, previousAvatarPath)
         ) {
-          // Best effort: an orphaned old avatar is harmless.
-          await storage.remove([avatar.previousPath]);
+          // The profile already points at the new object. Failure to remove the
+          // old one is harmless; the orphan reconciliation job will retry.
+          await removeAvatarPathBestEffort(previousAvatarPath);
         }
       }
       if (error !== null) throw error;
@@ -554,64 +565,102 @@ export function createSupabaseResources(config: Environment): SupabaseResources 
         avatarUrl: await profileAvatarUrl(userId, data.avatar_path as string | null),
       };
     },
-    async uploadProfileAvatar(userId, contentType, data) {
-      const uploadId = randomUUID();
-      const path = pendingAvatarPath(userId, uploadId);
-      const { error } = await avatarStorage().upload(path, data, {
-        contentType,
-        upsert: false,
-      });
-      if (error !== null) throw error;
-      return { uploadId, avatarUrl: await signAvatar(path) };
-    },
-    async discardProfileAvatar(userId, uploadId) {
-      const { data, error } = await avatarStorage().remove([
-        pendingAvatarPath(userId, uploadId),
-      ]);
-      if (error !== null) throw error;
-      return data.length > 0;
-    },
-    async cleanupPendingProfileAvatars() {
+    async cleanupOrphanedProfileAvatars() {
       if (adminClient === null) return 0;
       const storage = adminClient.storage.from(AVATAR_BUCKET);
-      const cutoff = Date.now() - PENDING_AVATAR_MAX_AGE_MILLISECONDS;
-      let deletedCount = 0;
+      const cutoff = Date.now() - ORPHAN_AVATAR_GRACE_PERIOD_MILLISECONDS;
+      const profiles: Array<{ avatar_path: string | null }> = [];
       for (let offset = 0; ; offset += 1_000) {
-        const { data: userEntries, error: userError } = await storage.list('', {
-          limit: 1_000,
-          offset,
-        });
-        if (userError !== null) throw userError;
-        if (userEntries.length === 0) break;
-        for (const userEntry of userEntries) {
-          if (
-            typeof userEntry.name !== 'string' ||
-            !/^[0-9a-f-]{36}$/i.test(userEntry.name)
-          ) continue;
-          const { data: pendingEntries, error: pendingError } = await storage.list(
-            `${userEntry.name}/pending`,
-            { limit: 1_000 },
-          );
-          if (pendingError !== null) throw pendingError;
-          const stalePaths: string[] = [];
-          for (const entry of pendingEntries) {
+        const { data, error } = await adminClient
+          .from('profiles')
+          .select('avatar_path')
+          .range(offset, offset + 999);
+        if (error !== null) throw error;
+        const rows = data ?? [];
+        profiles.push(...(rows as Array<{ avatar_path: string | null }>));
+        if (rows.length < 1_000) break;
+      }
+      const referencedPaths = new Set(
+        profiles
+          .map((profile) => profile.avatar_path)
+          .filter((path): path is string => path !== null),
+      );
+
+      const candidates = new Set<string>();
+      const collectOrphans = async (folder: string, pathPrefix: string): Promise<void> => {
+        for (let offset = 0; ; offset += 1_000) {
+          const { data, error } = await storage.list(folder, {
+            limit: 1_000,
+            offset,
+          });
+          if (error !== null) throw error;
+          const entries = data ?? [];
+          for (const entry of entries) {
             const timestamp = entry.created_at ?? entry.updated_at;
+            const path = typeof entry.name === 'string'
+              ? `${pathPrefix}/${entry.name}`
+              : null;
             if (
-              typeof entry.name === 'string' &&
+              path !== null &&
+              entry.id !== null &&
+              !referencedPaths.has(path) &&
               typeof timestamp === 'string' &&
               Date.parse(timestamp) < cutoff
             ) {
-              stalePaths.push(`${userEntry.name}/pending/${entry.name}`);
+              candidates.add(path);
             }
           }
-          if (stalePaths.length === 0) continue;
-          const { error: removeError } = await storage.remove(stalePaths);
-          if (removeError !== null) throw removeError;
-          deletedCount += stalePaths.length;
+          if (entries.length < 1_000) break;
         }
-        if (userEntries.length < 1_000) break;
+      };
+
+      const uploadsUsers: NonNullable<Awaited<ReturnType<typeof storage.list>>['data']> = [];
+      for (let offset = 0; ; offset += 1_000) {
+        const { data, error } = await storage.list('uploads', { limit: 1_000, offset });
+        if (error !== null) throw error;
+        const entries = data ?? [];
+        uploadsUsers.push(...entries);
+        if (entries.length < 1_000) break;
       }
-      return deletedCount;
+      for (const entry of uploadsUsers) {
+        if (
+          typeof entry.name === 'string' &&
+          /^[0-9a-f-]{36}$/i.test(entry.name) &&
+          entry.id === null
+        ) {
+          await collectOrphans(`uploads/${entry.name}`, `uploads/${entry.name}`);
+        }
+      }
+
+      // Sweep legacy saved-avatar paths too, so a failed best-effort deletion
+      // during migration can still be recovered by this second layer.
+      const rootEntries: NonNullable<Awaited<ReturnType<typeof storage.list>>['data']> = [];
+      for (let offset = 0; ; offset += 1_000) {
+        const { data, error } = await storage.list('', { limit: 1_000, offset });
+        if (error !== null) throw error;
+        const entries = data ?? [];
+        rootEntries.push(...entries);
+        if (entries.length < 1_000) break;
+      }
+      for (const entry of rootEntries) {
+        if (
+          typeof entry.name === 'string' &&
+          /^[0-9a-f-]{36}$/i.test(entry.name) &&
+          entry.id === null
+        ) {
+          await collectOrphans(entry.name, entry.name);
+          await collectOrphans(`${entry.name}/avatars`, `${entry.name}/avatars`);
+          await collectOrphans(`${entry.name}/pending`, `${entry.name}/pending`);
+        }
+      }
+
+      if (candidates.size === 0) return 0;
+      const paths = [...candidates];
+      for (let offset = 0; offset < paths.length; offset += 1_000) {
+        const { error: removeError } = await storage.remove(paths.slice(offset, offset + 1_000));
+        if (removeError !== null) throw removeError;
+      }
+      return paths.length;
     },
     async listClasses(accessToken): Promise<ClassRecord[]> {
       const { data, error } = await forAccessToken(accessToken)
