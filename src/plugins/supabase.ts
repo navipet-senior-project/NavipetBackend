@@ -559,10 +559,10 @@ export function createSupabaseResources(config: Environment): SupabaseResources 
       if (error !== null) throw error;
       if (data === null) return null;
       return {
-        displayName: data.display_name as string,
-        email: data.email as string | null,
-        role: data.role as ProfileRecord['role'],
-        avatarUrl: await profileAvatarUrl(userId, data.avatar_path as string | null),
+        displayName: data.display_name,
+        email: data.email,
+        role: data.role,
+        avatarUrl: await profileAvatarUrl(userId, data.avatar_path),
       };
     },
     async cleanupOrphanedProfileAvatars() {

@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { JwtVerifier } from '../../src/plugins/auth.js';
+import type { ProfileRecord } from '../../src/modules/profiles/profiles.types.js';
 import { createSupabaseResources } from '../../src/plugins/supabase.js';
 import { buildTestApp, TEST_ENV } from '../helpers/build-test-app.js';
 
@@ -72,7 +73,8 @@ describe('profiles', () => {
     });
 
     expect(response.statusCode).toBe(200);
-    expect(response.json().profile).toMatchObject({
+    const body = response.json<{ profile: ProfileRecord }>();
+    expect(body.profile).toMatchObject({
       displayName: 'Jane Doe',
       role: 'student',
       avatarUrl: 'https://example.com/default-avatar.png',
@@ -139,7 +141,8 @@ describe('profiles', () => {
     });
 
     expect(response.statusCode).toBe(200);
-    expect(response.json().profile.avatarUrl).toBe('https://example.com/saved-avatar.png');
+    const body = response.json<{ profile: ProfileRecord }>();
+    expect(body.profile.avatarUrl).toBe('https://example.com/saved-avatar.png');
     expect(updateProfile).toHaveBeenCalledWith('valid-access-token', verifiedUser.id, {
       displayName: 'Professor Jane Doe',
       role: 'professor',
