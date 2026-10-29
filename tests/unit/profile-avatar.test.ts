@@ -5,6 +5,7 @@ import {
   detectAvatarContentType,
   pendingAvatarPath,
   resolveAvatarPath,
+  uploadedAvatarPath,
 } from '../../src/modules/profiles/profiles.avatar.js';
 import { DEFAULT_AVATAR_PATH } from '../../src/modules/profiles/profiles.types.js';
 
@@ -34,6 +35,15 @@ describe('detectAvatarContentType', () => {
 });
 
 describe('resolveAvatarPath', () => {
+  it('supports the uploaded-avatar layout and legacy paths during transition', () => {
+    const path = uploadedAvatarPath(userId, otherUserId);
+    expect(path).toBe(`uploads/${userId}/${otherUserId}`);
+    expect(resolveAvatarPath(userId, path)).toBe(path);
+
+    const legacyPath = committedAvatarPath(userId, otherUserId);
+    expect(resolveAvatarPath(userId, legacyPath)).toBe(legacyPath);
+  });
+
   it('keeps paths inside the owner folder', () => {
     const path = committedAvatarPath(userId, otherUserId);
     expect(resolveAvatarPath(userId, path)).toBe(path);

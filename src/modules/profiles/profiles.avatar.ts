@@ -1,3 +1,5 @@
+import { randomUUID } from 'node:crypto';
+
 import { DEFAULT_AVATAR_PATH } from './profiles.types.js';
 
 export type AvatarContentType = 'image/jpeg' | 'image/png' | 'image/webp';
@@ -25,6 +27,12 @@ export function detectAvatarContentType(bytes: Buffer): AvatarContentType | null
   return null;
 }
 
+export function uploadedAvatarPath(userId: string, objectId = randomUUID()): string {
+  return `uploads/${userId}/${objectId}`;
+}
+
+// Retained for compatibility with existing avatar rows and cleanup. New
+// uploads use uploadedAvatarPath and never use either legacy location.
 export function pendingAvatarPath(userId: string, uploadId: string): string {
   return `${userId}/pending/${uploadId}`;
 }
@@ -34,13 +42,20 @@ export function committedAvatarPath(userId: string, uploadId: string): string {
 }
 
 export function isOwnAvatarPath(userId: string, path: string): boolean {
-  return path.startsWith(`${userId}/`) && !path.includes('..');
+  return (
+    !path.includes('..') &&
+    (
+      path.startsWith(`uploads/${userId}/`) ||
+      path.startsWith(`${userId}/avatars/`) ||
+      path.startsWith(`${userId}/pending/`)
+    )
+  );
 }
 
 /**
  * Returns the storage object to sign for a profile. `avatar_path` is writable
- * by its owner through PostgREST, so anything outside the owner's folder falls
- * back to the default instead of being signed with the service role.
+ * by its owner through PostgREST, so anything outside the owner's avatar
+ * locations falls back to the default instead of being signed with service role.
  */
 export function resolveAvatarPath(userId: string, storedPath: string | null): string {
   if (storedPath === null || !isOwnAvatarPath(userId, storedPath)) {
