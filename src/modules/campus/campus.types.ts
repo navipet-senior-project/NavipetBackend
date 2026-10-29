@@ -133,8 +133,15 @@ export interface PublicCampusResult {
     outdoorDestination?: { latitude: number; longitude: number };
     indoorDestinationId?: string;
     arrivalRadiusMeters?: number;
+    footprint?: BuildingFootprint;
   };
   indoor?: IndoorDoorPose;
+}
+
+/** GeoJSON Polygon outer ring, [longitude, latitude] positions, closed. */
+export interface BuildingFootprint {
+  type: 'Polygon';
+  coordinates: [number, number][][];
 }
 
 export interface CampusSearchResponse {

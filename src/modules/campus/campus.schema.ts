@@ -21,6 +21,25 @@ const OutdoorDestinationSchema = Type.Object(
   { additionalProperties: false },
 );
 
+const BuildingFootprintSchema = Type.Object(
+  {
+    type: Type.Literal('Polygon'),
+    coordinates: Type.Array(
+      Type.Array(Type.Tuple([Type.Number(), Type.Number()]), {
+        minItems: 4,
+      }),
+      { minItems: 1, maxItems: 1 },
+    ),
+  },
+  {
+    additionalProperties: false,
+    description:
+      'GeoJSON Polygon outer ring of the building, as closed ' +
+      '[longitude, latitude] positions. Arrival is detected near this ' +
+      'outline instead of the outdoor destination point.',
+  },
+);
+
 const IndoorDoorPoseSchema = Type.Object(
   {
     mapCode: Type.String({ minLength: 1 }),
@@ -57,6 +76,7 @@ export const PublicCampusResultSchema = Type.Object(
           arrivalRadiusMeters: Type.Optional(
             Type.Integer({ minimum: 3, maximum: 50 }),
           ),
+          footprint: Type.Optional(BuildingFootprintSchema),
           indoorDestinationId: Type.Optional(Type.String()),
         },
         { additionalProperties: false },
