@@ -561,6 +561,35 @@ export function createCampusService(dependencies: CampusServiceDependencies) {
   const outdoorFallback = createOutdoorFallbackResolver(
     dependencies.externalPlaces,
   );
+
+  async function roomResults(
+    rooms: CampusDestinationRecord[],
+    building: CampusDestinationRecord | null,
+  ): Promise<PublicCampusResult[]> {
+    let outdoor: ResolvedOutdoorDestination | null = null;
+    if (
+      building?.type === 'building' && building.active && building.searchable &&
+      coordinatesFor(building) === null &&
+      rooms.some((room) => room.type === 'room' && coordinatesFor(room) === null)
+    ) {
+      outdoor = await outdoorFallback.resolve(building);
+      if (outdoor !== null) {
+        building = {
+          ...building,
+          outdoorDestinationLatitude: outdoor.latitude,
+          outdoorDestinationLongitude: outdoor.longitude,
+        };
+      }
+    }
+    return rooms.map((room) => {
+      const inherited = withBuildingPin(room, building);
+      const result = toPublicCampusResult(inherited);
+      return outdoor === null || inherited === room
+        ? result
+        : withDerivedOutdoorDestination(result, outdoor, inherited);
+    });
+  }
+
   return {
     async autocomplete(
       input: string,
@@ -690,9 +719,10 @@ export function createCampusService(dependencies: CampusServiceDependencies) {
         }
         return {
           query: query.display,
-          results: rankRooms(rooms, query.roomIntent.roomNumber)
-            .slice(0, limit)
-            .map((room) => toPublicCampusResult(withBuildingPin(room, building))),
+          results: await roomResults(
+            rankRooms(rooms, query.roomIntent.roomNumber).slice(0, limit),
+            building,
+          ),
         };
       }
 
@@ -767,7 +797,7 @@ export function createCampusService(dependencies: CampusServiceDependencies) {
         const parent = await dependencies.campusPlaces.findPlaceById(
           place.parentDestinationId,
         );
-        return toPublicCampusResult(withBuildingPin(place, parent));
+        return (await roomResults([place], parent))[0] as PublicCampusResult;
       }
       const outdoor = await outdoorFallback.resolve(place);
       return outdoor === null
@@ -809,10 +839,12 @@ export function createCampusService(dependencies: CampusServiceDependencies) {
           name: building.name,
         },
         query: query.display,
-        results: rankRooms(rooms, roomQuery)
-          .filter((room) => room.active && room.searchable && room.type === 'room')
-          .slice(0, limit)
-          .map((room) => toPublicCampusResult(withBuildingPin(room, building))),
+        results: await roomResults(
+          rankRooms(rooms, roomQuery)
+            .filter((room) => room.active && room.searchable && room.type === 'room')
+            .slice(0, limit),
+          building,
+        ),
       };
     },
   };
