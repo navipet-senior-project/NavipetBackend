@@ -402,6 +402,34 @@ export function toPublicCampusResult(
   };
 }
 
+export function withBuildingPin(
+  room: CampusDestinationRecord,
+  building: CampusDestinationRecord | null,
+): CampusDestinationRecord {
+  if (
+    room.type !== 'room' ||
+    coordinatesFor(room) !== null ||
+    building === null ||
+    building.type !== 'building' ||
+    !building.active ||
+    !building.searchable
+  ) return room;
+  const coordinates = coordinatesFor(building);
+  if (coordinates === null) return room;
+  return {
+    ...room,
+    outdoorDestinationLatitude: coordinates.latitude,
+    outdoorDestinationLongitude: coordinates.longitude,
+    arrivalRadiusMeters: room.arrivalRadiusMeters ?? building.arrivalRadiusMeters,
+    metadata: {
+      ...(building.metadata.footprint === undefined
+        ? {}
+        : { footprint: building.metadata.footprint }),
+      ...room.metadata,
+    },
+  };
+}
+
 function coordinatesFor(
   destination: CampusDestinationRecord,
 ): UserLocation | null {
@@ -664,7 +692,7 @@ export function createCampusService(dependencies: CampusServiceDependencies) {
           query: query.display,
           results: rankRooms(rooms, query.roomIntent.roomNumber)
             .slice(0, limit)
-            .map((room) => toPublicCampusResult(room)),
+            .map((room) => toPublicCampusResult(withBuildingPin(room, building))),
         };
       }
 
@@ -735,6 +763,12 @@ export function createCampusService(dependencies: CampusServiceDependencies) {
       if (place === null || !place.active || !place.searchable) return null;
       const result = toPublicCampusResult(place);
       if (hasOutdoorDestination(result)) return result;
+      if (place.type === 'room' && place.parentDestinationId !== null) {
+        const parent = await dependencies.campusPlaces.findPlaceById(
+          place.parentDestinationId,
+        );
+        return toPublicCampusResult(withBuildingPin(place, parent));
+      }
       const outdoor = await outdoorFallback.resolve(place);
       return outdoor === null
         ? result
@@ -778,7 +812,7 @@ export function createCampusService(dependencies: CampusServiceDependencies) {
         results: rankRooms(rooms, roomQuery)
           .filter((room) => room.active && room.searchable && room.type === 'room')
           .slice(0, limit)
-          .map((room) => toPublicCampusResult(room)),
+          .map((room) => toPublicCampusResult(withBuildingPin(room, building))),
       };
     },
   };

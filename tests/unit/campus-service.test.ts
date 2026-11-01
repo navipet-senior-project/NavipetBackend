@@ -5,6 +5,7 @@ import {
   createCampusService,
   footprintFrom,
   normalizeCampusQuery,
+  withBuildingPin,
 } from '../../src/modules/campus/campus.service.js';
 import type {
   CampusDestinationRecord,
@@ -111,6 +112,122 @@ describe('normalizeCampusQuery', () => {
       meaningfulLength: 13,
       roomIntent: null,
     });
+  });
+});
+
+describe('room building pins', () => {
+  const footprint = {
+    type: 'Polygon',
+    coordinates: [[[-118.111, 33.783], [-118.110, 33.783], [-118.110, 33.782], [-118.111, 33.783]]],
+  };
+  const building = destination({
+    code: 'VEC', buildingCode: 'VEC', name: 'Vivian Engineering Center',
+    outdoorDestinationLatitude: 33.78288325, outdoorDestinationLongitude: -118.11034222,
+    arrivalRadiusMeters: 10, metadata: { footprint },
+  });
+  const room = destination({
+    id: '00000000-0000-4000-8000-000000000119', type: 'room',
+    name: 'VEC 119', buildingCode: 'VEC', roomNumber: '119', floorNumber: '1',
+    parentDestinationId: building.id, parentName: building.name,
+    indoorDestinationId: 'VEC119', metadata: { categories: ['room'] },
+  });
+  const navigation = {
+    outdoorDestination: { latitude: 33.78288325, longitude: -118.11034222 },
+    arrivalRadiusMeters: 10, footprint, indoorDestinationId: 'VEC119',
+  };
+
+  it.each(['VEC119', 'VEC 119', 'vec-119'])('inherits the building pin for %s without changing room identity', async (query) => {
+    const deps = gateways([building]);
+    deps.campusPlaces.searchBuildingRooms = vi.fn().mockResolvedValue([room]);
+    const result = await createCampusService(deps).autocomplete(query, 10);
+    expect(result.results[0]).toMatchObject({
+      id: room.id, type: 'room', title: 'VEC 119',
+      subtitle: 'Vivian Engineering Center · Floor 1', navigation,
+    });
+    expect(room.outdoorDestinationLatitude).toBeNull();
+  });
+
+  it('inherits building navigation for rooms without an indoor pose in searchRooms', async () => {
+    const deps = gateways([]);
+    deps.campusPlaces.findBuildingByCode = vi.fn().mockResolvedValue(building);
+    deps.campusPlaces.searchBuildingRooms = vi.fn().mockResolvedValue([{ ...room, indoorDestinationId: null }]);
+    const result = await createCampusService(deps).searchRooms('VEC', '119', 10);
+    expect(result?.results[0]?.navigation).toEqual({
+      outdoorDestination: navigation.outdoorDestination, arrivalRadiusMeters: 10, footprint,
+    });
+  });
+
+  it('keeps room radius and footprint when inheriting a building pin', async () => {
+    const roomFootprint = {
+      type: 'Polygon',
+      coordinates: [[[-118.112, 33.784], [-118.110, 33.784], [-118.110, 33.782], [-118.112, 33.784]]],
+    };
+    const deps = gateways([building]);
+    deps.campusPlaces.searchBuildingRooms = vi.fn().mockResolvedValue([{
+      ...room, arrivalRadiusMeters: 5, metadata: { footprint: roomFootprint, categories: ['room'] },
+    }]);
+    const result = await createCampusService(deps).autocomplete('VEC119', 10);
+    expect(result.results[0]?.navigation).toEqual({
+      outdoorDestination: navigation.outdoorDestination, arrivalRadiusMeters: 5,
+      footprint: roomFootprint, indoorDestinationId: 'VEC119',
+    });
+  });
+
+  it('fetches the canonical parent for a pinless room lookup', async () => {
+    const deps = gateways([]);
+    const findPlace = vi.fn((id: string) => Promise.resolve(id === room.id ? room : id === building.id ? building : null));
+    deps.campusPlaces.findPlaceById = findPlace;
+    const externalSearch = vi.fn().mockResolvedValue([]);
+    deps.externalPlaces.searchExternalPlaces = externalSearch;
+    const result = await createCampusService(deps).findPlace(room.id);
+    expect(result).toMatchObject({ id: room.id, title: 'VEC 119', navigation });
+    expect(findPlace).toHaveBeenNthCalledWith(2, building.id);
+    expect(externalSearch).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['missing', null],
+    ['inactive', { ...building, active: false }],
+    ['unsearchable', { ...building, searchable: false }],
+    ['pinless', { ...building, outdoorDestinationLatitude: null, outdoorDestinationLongitude: null }],
+    ['invalid pin', { ...building, outdoorDestinationLatitude: 91 }],
+  ])('keeps a room pinless when its parent is %s', async (_label, parent) => {
+    const deps = gateways([]);
+    deps.campusPlaces.findPlaceById = vi.fn((id: string) => Promise.resolve(id === room.id ? room : parent));
+    const externalSearch = vi.fn().mockResolvedValue([]);
+    deps.externalPlaces.searchExternalPlaces = externalSearch;
+    const result = await createCampusService(deps).findPlace(room.id);
+    expect(result?.navigation).toEqual({ indoorDestinationId: 'VEC119' });
+    expect(externalSearch).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    { latitude: 33.78, longitude: -118.11 },
+    { outdoorDestinationLatitude: 33.78, outdoorDestinationLongitude: -118.11 },
+  ])('keeps a room own pin and avoids a parent lookup: %j', async (coordinates) => {
+    const ownRoom = { ...room, ...coordinates };
+    const deps = gateways([building]);
+    const findPlace = vi.fn().mockResolvedValue(ownRoom);
+    deps.campusPlaces.findPlaceById = findPlace;
+    deps.campusPlaces.searchBuildingRooms = vi.fn().mockResolvedValue([ownRoom]);
+    const service = createCampusService(deps);
+    const lookup = await service.findPlace(room.id);
+    const search = await service.autocomplete('VEC119', 10);
+    for (const result of [lookup, search.results[0]]) {
+      expect(result?.navigation).toEqual({ outdoorDestination: { latitude: 33.78, longitude: -118.11 }, indoorDestinationId: 'VEC119' });
+    }
+    expect(findPlace).toHaveBeenCalledTimes(1);
+  });
+
+  it.each(['entrance', 'amenity'] as const)('leaves non-room %s records unchanged', async (type) => {
+    const child = { ...room, type, indoorDestinationId: null };
+    expect(withBuildingPin(child, building)).toBe(child);
+    const deps = gateways([]);
+    const findPlace = vi.fn().mockResolvedValue(child);
+    deps.campusPlaces.findPlaceById = findPlace;
+    const result = await createCampusService(deps).findPlace(child.id);
+    expect(result).not.toHaveProperty('navigation');
+    expect(findPlace).toHaveBeenCalledTimes(1);
   });
 });
 

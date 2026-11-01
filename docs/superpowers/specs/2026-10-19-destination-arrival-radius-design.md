@@ -46,7 +46,7 @@ Out of scope:
 
 - Seeding radius values. The column ships with every value `null`, which keeps
   today's behaviour. Values are set per building in a follow-up.
-- Inheriting a building's radius into its rooms or entrances.
+- Inheriting a building's radius into entrances.
 - Server-side arrival detection or arrival events.
 
 ## Backend
@@ -70,10 +70,9 @@ Migration `<timestamp>_add_destination_arrival_radius`:
 - No grant or RLS change: `anon` and `authenticated` already have table-level
   `select` on `campus_destinations`, gated by the existing read policy.
 
-No parent inheritance. Rooms and entrances never inherit outdoor coordinates
-from their building (`src/modules/campus/outdoor-fallback.ts`, `isDerivable`),
-so inheriting a radius for a point that is itself not inherited would be
-inconsistent.
+Entrances never inherit from their building. A room without its own pin
+inherits its building's pin, radius and footprint (`withBuildingPin` in
+`src/modules/campus/campus.service.ts`); a radius set on the room itself wins.
 
 ### API
 
