@@ -1,4 +1,5 @@
 import type {
+  BuildingFootprint,
   CampusCategorySearch,
   CampusDestinationRecord,
   IndoorDoorPointRecord,
@@ -279,6 +280,46 @@ function validCoordinatePair(
   );
 }
 
+const MaxFootprintPositions = 500;
+
+// metadata.footprint is hand-loaded GeoJSON, so anything malformed is dropped
+// and the client falls back to the outdoor destination radius. Holes are
+// discarded: a courtyard still counts as arriving at the building.
+export function footprintFrom(
+  metadata: Record<string, unknown>,
+): BuildingFootprint | null {
+  const value = metadata.footprint;
+  if (typeof value !== 'object' || value === null) return null;
+  const { type, coordinates } = value as Record<string, unknown>;
+  if (type !== 'Polygon' || !Array.isArray(coordinates)) return null;
+  const ring: unknown = coordinates[0];
+  if (
+    !Array.isArray(ring) ||
+    ring.length < 4 ||
+    ring.length > MaxFootprintPositions
+  ) {
+    return null;
+  }
+  const positions: [number, number][] = [];
+  for (const position of ring) {
+    if (!Array.isArray(position)) return null;
+    const [longitude, latitude] = position as unknown[];
+    if (
+      typeof longitude !== 'number' ||
+      typeof latitude !== 'number' ||
+      !validCoordinatePair(latitude, longitude)
+    ) {
+      return null;
+    }
+    positions.push([longitude, latitude]);
+  }
+  const first = positions[0];
+  const last = positions.at(-1);
+  if (first === undefined || last === undefined) return null;
+  if (first[0] !== last[0] || first[1] !== last[1]) return null;
+  return { type: 'Polygon', coordinates: [positions] };
+}
+
 function toIndoorDoorPose(
   door: IndoorDoorPointRecord & { headingDeg: number },
 ): IndoorDoorPose {
@@ -306,6 +347,7 @@ export function toPublicCampusResult(
     destination.indoorDestinationId !== null &&
     destination.indoorDestinationId.trim().length > 0;
   const hasNavigation = hasOutdoor || hasIndoor;
+  const footprint = footprintFrom(destination.metadata);
   const categories = stringArray(destination.metadata.categories);
   const publicType = categories.includes('housing')
     ? 'housing'
@@ -350,6 +392,7 @@ export function toPublicCampusResult(
             ...(hasOutdoor && destination.arrivalRadiusMeters !== null
               ? { arrivalRadiusMeters: destination.arrivalRadiusMeters }
               : {}),
+            ...(hasOutdoor && footprint !== null ? { footprint } : {}),
             ...(hasIndoor
               ? { indoorDestinationId: destination.indoorDestinationId as string }
               : {}),
@@ -378,8 +421,10 @@ function hasOutdoorDestination(result: PublicCampusResult): boolean {
 function withDerivedOutdoorDestination(
   result: PublicCampusResult,
   outdoor: ResolvedOutdoorDestination,
-  arrivalRadiusMeters: number | null,
+  destination: CampusDestinationRecord,
 ): PublicCampusResult {
+  const { arrivalRadiusMeters } = destination;
+  const footprint = footprintFrom(destination.metadata);
   return {
     ...result,
     ...(outdoor.attribution === undefined
@@ -388,6 +433,7 @@ function withDerivedOutdoorDestination(
     navigation: {
       ...result.navigation,
       ...(arrivalRadiusMeters === null ? {} : { arrivalRadiusMeters }),
+      ...(footprint === null ? {} : { footprint }),
       outdoorDestination: {
         latitude: outdoor.latitude,
         longitude: outdoor.longitude,
@@ -665,7 +711,7 @@ export function createCampusService(dependencies: CampusServiceDependencies) {
               : withDerivedOutdoorDestination(
                   result,
                   outdoor,
-                  destination.arrivalRadiusMeters,
+                  destination,
                 );
           })
           .filter(hasOutdoorDestination);
@@ -692,7 +738,7 @@ export function createCampusService(dependencies: CampusServiceDependencies) {
       const outdoor = await outdoorFallback.resolve(place);
       return outdoor === null
         ? result
-        : withDerivedOutdoorDestination(result, outdoor, place.arrivalRadiusMeters);
+        : withDerivedOutdoorDestination(result, outdoor, place);
     },
     async findPlaceDetail(
       id: string,

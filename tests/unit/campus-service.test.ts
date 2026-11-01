@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   attachIndoorDestinationIds,
   createCampusService,
+  footprintFrom,
   normalizeCampusQuery,
 } from '../../src/modules/campus/campus.service.js';
 import type {
@@ -59,6 +60,33 @@ function gateways(records: CampusDestinationRecord[]): {
     },
   };
 }
+
+describe('footprintFrom', () => {
+  const ring: [number, number][] = [
+    [-118.1105, 33.7831],
+    [-118.1102, 33.7831],
+    [-118.1102, 33.7825],
+    [-118.1105, 33.7831],
+  ];
+
+  it('keeps the outer ring of a closed polygon and drops holes and altitude', () => {
+    const withAltitude = ring.map(([lng, lat]) => [lng, lat, 12]);
+    expect(
+      footprintFrom({ footprint: { type: 'Polygon', coordinates: [withAltitude, ring] } }),
+    ).toEqual({ type: 'Polygon', coordinates: [ring] });
+  });
+
+  it.each([
+    ['missing', {}],
+    ['not a polygon', { footprint: { type: 'Point', coordinates: [ring] } }],
+    ['too few positions', { footprint: { type: 'Polygon', coordinates: [ring.slice(1)] } }],
+    ['open ring', { footprint: { type: 'Polygon', coordinates: [[...ring.slice(0, 3), [-118.1, 33.78]]] } }],
+    ['out-of-range latitude', { footprint: { type: 'Polygon', coordinates: [[[0, 91], ...ring.slice(1)]] } }],
+    ['string position', { footprint: { type: 'Polygon', coordinates: [['x', ...ring.slice(1)]] } }],
+  ])('rejects %s', (_label, metadata) => {
+    expect(footprintFrom(metadata)).toBeNull();
+  });
+});
 
 describe('normalizeCampusQuery', () => {
   it.each([

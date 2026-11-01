@@ -4,7 +4,7 @@ import type { FastifyInstance } from 'fastify';
 
 import { buildApp } from './app.js';
 import { parseEnv, type RawEnvironment } from './config/env.js';
-import { startPendingAvatarCleanup } from './modules/profiles/profiles.cleanup.js';
+import { startOrphanAvatarCleanup } from './modules/profiles/profiles.cleanup.js';
 
 type ShutdownSignal = 'SIGINT' | 'SIGTERM';
 
@@ -51,7 +51,7 @@ export async function startServer(
   const env = parseEnv(input);
   const app = await buildApp({ env });
   registerShutdownHandlers(app, registrar);
-  const stopAvatarCleanup = startPendingAvatarCleanup(app);
+  const stopAvatarCleanup = startOrphanAvatarCleanup(app);
   app.addHook('onClose', () => {
     stopAvatarCleanup();
   });
