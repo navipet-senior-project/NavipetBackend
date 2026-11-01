@@ -125,6 +125,52 @@ describe('campus routes', () => {
     await app?.close();
   });
 
+  it.each(['/autocomplete?q=VEC119', `/places/${ids.room}`])('serializes a room building pin and preserves indoor navigation: %s', async (url) => {
+    const footprint = {
+      type: 'Polygon',
+      coordinates: [[[-118.111, 33.783], [-118.110, 33.783], [-118.110, 33.782], [-118.111, 33.783]]],
+    };
+    const building = destination({
+      code: 'VEC', buildingCode: 'VEC', name: 'Vivian Engineering Center',
+      latitude: 33.78288325, longitude: -118.11034222,
+      arrivalRadiusMeters: 10, metadata: { footprint },
+    });
+    const room = destination({
+      id: ids.room, type: 'room', name: 'VEC 119', code: 'VEC-119',
+      buildingCode: 'VEC', roomNumber: '119', parentDestinationId: building.id,
+      indoorDestinationId: 'VEC119',
+    });
+    app = await buildTestApp({}, {
+      authVerifier: verifier(), externalPlaces: noExternal(),
+      supabaseResources: resources({
+        searchDestinations: vi.fn().mockResolvedValue([building]),
+        searchBuildingRooms: vi.fn().mockResolvedValue([room]),
+        findPlaceById: vi.fn((id: string) => Promise.resolve(id === ids.room ? room : id === building.id ? building : null)),
+        findIndoorDoorPoint: vi.fn().mockResolvedValue({
+          mapCode: 'vec-map', frame: 'multiset-mapset', doorKey: 'VEC119', floor: '1',
+          x: 1, y: 2, z: 3, headingDeg: 90,
+        }),
+      }),
+    });
+    const response = await app.inject({ method: 'GET', headers: authorization, url });
+    expect(response.statusCode).toBe(200);
+    const body = response.json<{ place?: PublicCampusResult; results?: PublicCampusResult[] }>();
+    const result = body.place ?? body.results?.[0];
+    expect(result).toMatchObject({
+      id: ids.room, type: 'room', title: 'VEC 119',
+      navigation: {
+        outdoorDestination: { latitude: 33.78288325, longitude: -118.11034222 },
+        arrivalRadiusMeters: 10, footprint, indoorDestinationId: 'VEC119',
+      },
+    });
+    if (body.place) {
+      expect(result?.indoor).toEqual({
+        mapCode: 'vec-map', frame: 'multiset-mapset', doorKey: 'VEC119', floor: '1',
+        position: { x: 1, y: 2, z: 3 }, headingDeg: 90,
+      });
+    }
+  });
+
   describe('arrival radius', () => {
     const routes = [
       '/autocomplete?q=COB',
