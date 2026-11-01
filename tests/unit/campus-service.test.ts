@@ -189,6 +189,7 @@ describe('room building pins', () => {
     ['missing', null],
     ['inactive', { ...building, active: false }],
     ['unsearchable', { ...building, searchable: false }],
+    ['not a building', { ...building, type: 'amenity' as const }],
     ['pinless', { ...building, outdoorDestinationLatitude: null, outdoorDestinationLongitude: null }],
     ['invalid pin', { ...building, outdoorDestinationLatitude: 91 }],
   ])('keeps a room pinless when its parent is %s', async (_label, parent) => {
@@ -198,7 +199,101 @@ describe('room building pins', () => {
     deps.externalPlaces.searchExternalPlaces = externalSearch;
     const result = await createCampusService(deps).findPlace(room.id);
     expect(result?.navigation).toEqual({ indoorDestinationId: 'VEC119' });
-    expect(externalSearch).not.toHaveBeenCalled();
+    if (parent?.type === 'building' && parent.active && parent.searchable) {
+      expect(externalSearch).toHaveBeenCalledWith(building.name, 5);
+    } else {
+      expect(externalSearch).not.toHaveBeenCalled();
+    }
+  });
+
+  describe.each(['autocomplete', 'findPlace', 'searchRooms'] as const)('%s with a derived building pin', (path) => {
+    async function lookup(deps: ReturnType<typeof gateways>, target = room) {
+      const service = createCampusService(deps);
+      if (path === 'findPlace') return service.findPlaceDetail(target.id);
+      if (path === 'searchRooms') return (await service.searchRooms('VEC', '119', 10))?.results[0];
+      return (await service.autocomplete('VEC 119', 10)).results[0];
+    }
+
+    function fallbackGateways(target = room) {
+      const pinlessBuilding = {
+        ...building, outdoorDestinationLatitude: null, outdoorDestinationLongitude: null,
+        arrivalRadiusMeters: null,
+      };
+      const deps = gateways([pinlessBuilding]);
+      deps.campusPlaces.findBuildingByCode = vi.fn().mockResolvedValue(pinlessBuilding);
+      deps.campusPlaces.findPlaceById = vi.fn((id: string) => Promise.resolve(
+        id === target.id ? target : id === building.id ? pinlessBuilding : null,
+      ));
+      deps.campusPlaces.searchBuildingRooms = vi.fn().mockResolvedValue([target]);
+      const externalSearch = vi.fn().mockResolvedValue([{
+        id: 'mapbox-vec', name: building.name, description: building.name,
+        latitude: 33.78288325, longitude: -118.11034222,
+        attribution: '© Mapbox and its suppliers',
+      }]);
+      deps.externalPlaces.searchExternalPlaces = externalSearch;
+      return { ...deps, externalSearch };
+    }
+
+    it('inherits the fallback pin, parent footprint and attribution while keeping room identity', async () => {
+      const target = { ...room, metadata: { ...room.metadata, footprint } };
+      const deps = fallbackGateways(target);
+      deps.campusPlaces.findIndoorDoorPoint = vi.fn().mockResolvedValue({
+        mapCode: 'MSET_XTBY7AM7ZK77', frame: 'multiset-mapset', doorKey: 'VEC119',
+        floor: '1', x: -5.7651, y: -1.8186, z: 22.6689, headingDeg: 185.36,
+      });
+      const result = await lookup(deps, target);
+      expect(result).toMatchObject({
+        id: room.id, type: 'room', title: 'VEC 119',
+        subtitle: 'Vivian Engineering Center · Floor 1',
+        attribution: '© Mapbox and its suppliers',
+        navigation: {
+          outdoorDestination: { latitude: 33.78288325, longitude: -118.11034222 },
+          footprint, indoorDestinationId: 'VEC119',
+        },
+      });
+      expect(result?.navigation).not.toHaveProperty('arrivalRadiusMeters');
+      if (path === 'findPlace') {
+        expect(result?.indoor).toEqual({
+          mapCode: 'MSET_XTBY7AM7ZK77', frame: 'multiset-mapset', doorKey: 'VEC119',
+          floor: '1', position: { x: -5.7651, y: -1.8186, z: 22.6689 }, headingDeg: 185.36,
+        });
+      }
+      expect(deps.externalSearch).toHaveBeenCalledWith(building.name, 5);
+      expect(room.outdoorDestinationLatitude).toBeNull();
+    });
+
+    it('keeps an existing room pin without searching externally', async () => {
+      const target = { ...room, latitude: 33.78, longitude: -118.11 };
+      const deps = fallbackGateways(target);
+      const result = await lookup(deps, target);
+      expect(result?.navigation).toEqual({
+        outdoorDestination: { latitude: 33.78, longitude: -118.11 }, indoorDestinationId: 'VEC119',
+      });
+      expect(result).not.toHaveProperty('attribution');
+      expect(deps.externalSearch).not.toHaveBeenCalled();
+    });
+
+    it('preserves room navigation overrides when using the fallback', async () => {
+      const roomFootprint = {
+        type: 'Polygon',
+        coordinates: [[[-118.112, 33.784], [-118.110, 33.784], [-118.110, 33.782], [-118.112, 33.784]]],
+      };
+      const target = { ...room, arrivalRadiusMeters: 5, metadata: { footprint: roomFootprint } };
+      const result = await lookup(fallbackGateways(target), target);
+      expect(result?.navigation).toEqual({
+        outdoorDestination: { latitude: 33.78288325, longitude: -118.11034222 },
+        arrivalRadiusMeters: 5, footprint: roomFootprint, indoorDestinationId: 'VEC119',
+      });
+    });
+
+    it('keeps the room pinless without error when fallback finds nothing', async () => {
+      const deps = fallbackGateways();
+      deps.externalPlaces.searchExternalPlaces = vi.fn().mockResolvedValue([]);
+      const result = await lookup(deps);
+      expect(result).toMatchObject({ id: room.id, title: 'VEC 119' });
+      expect(result?.navigation).toEqual({ indoorDestinationId: 'VEC119' });
+      expect(result).not.toHaveProperty('attribution');
+    });
   });
 
   it.each([
