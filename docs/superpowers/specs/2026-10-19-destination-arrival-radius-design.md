@@ -73,6 +73,8 @@ Migration `<timestamp>_add_destination_arrival_radius`:
 Entrances never inherit from their building. A room without its own pin
 inherits its building's pin, radius and footprint (`withBuildingPin` in
 `src/modules/campus/campus.service.ts`); a radius set on the room itself wins.
+When the building has no stored coordinates, its pin is the derived Mapbox
+fallback (`outdoor-fallback.ts`); with no result the room stays pinless.
 
 ### API
 
