@@ -173,3 +173,34 @@ The service-role key must remain server-only and must never be included in the
 Flutter application, committed to source control, or exposed to clients.
 Sensitive request headers and configured secrets are redacted from backend
 logs.
+
+## Indoor AR token exchange
+
+`POST /indoor/ar-token` requires the same standard Supabase bearer session as
+campus routes. It takes no body and returns only `{ token, expiresOn }`, with
+`expiresOn` an ISO 8601 timestamp and `Cache-Control: no-store`. Swagger documents
+this contract; Flutter must refresh its OpenAPI snapshot in its separate PR.
+
+Set **MULTISET_CLIENT_ID** and **MULTISET_CLIENT_SECRET** on the backend (Render).
+Use credentials with only the **Query** scope: the token inherits their scope.
+Never ship either credential in Flutter, Unity, or an APK. The legacy
+`MULTISET_API_KEY` and `MULTISET_API_BASE_URL` slots are unused by this endpoint;
+exchanges use the fixed HTTPS MultiSet endpoint and reject redirects.
+
+Without either credential, the endpoint returns HTTP 503 with
+`error.code = INDOOR_AR_UNAVAILABLE`. Upstream failures return HTTP 502 using the
+standard safe error envelope. Requests are limited to five per verified user per
+minute. The service reuses a process-local token while more than five minutes
+remain and shares concurrent exchanges. Restarts and multiple replicas each need
+their own token; this is not a durable lifetime quota counter. Failed exchanges
+are not retried automatically.
+
+MultiSet documents a 30-minute lifetime and Query permission for localization:
+[credentials](https://docs.multiset.ai/fundamentals/credentials) and
+[authentication](https://docs.multiset.ai/fundamentals/rest-api-docs/authentication).
+Its [CORS guide](https://docs.multiset.ai/fundamentals/credentials/configuring-allowed-domains-cors)
+describes browser origins, without specifying rejection of native requests that
+have no Origin header. Verify this on a phone during Unity integration. The SDK
+docs describe internal exchange/refresh using credentials; accepting a supplied
+token and renewing it belongs to that later integration. This backend never
+receives or localizes camera frames.

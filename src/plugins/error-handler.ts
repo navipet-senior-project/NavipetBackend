@@ -119,8 +119,10 @@ const errorHandlerPlugin: FastifyPluginCallback<{ prettyRequestLogging?: boolean
         }
         return reply.status(error.statusCode).send(
           body(
-            ErrorCode.INTERNAL_ERROR,
-            'Internal server error',
+            error.code === ErrorCode.INDOOR_AR_UNAVAILABLE
+              ? ErrorCode.INDOOR_AR_UNAVAILABLE : ErrorCode.INTERNAL_ERROR,
+            error.code === ErrorCode.INDOOR_AR_UNAVAILABLE
+              ? 'Indoor AR token service is not configured' : 'Internal server error',
             request.id,
           ),
         );

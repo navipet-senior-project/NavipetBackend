@@ -63,6 +63,8 @@ const EnvironmentSchema = Type.Object(
     SUPABASE_JWT_ISSUER: HttpUrl,
     SUPABASE_JWT_AUDIENCE: Type.String({ minLength: 1 }),
     MULTISET_API_KEY: Type.Optional(Type.String({ minLength: 1 })),
+    MULTISET_CLIENT_ID: Type.Optional(Type.String({ minLength: 1 })),
+    MULTISET_CLIENT_SECRET: Type.Optional(Type.String({ minLength: 1 })),
     MULTISET_API_BASE_URL: Type.Optional(HttpUrl),
     MAPBOX_ACCESS_TOKEN: Type.Optional(Type.String({ minLength: 1 })),
     MAPBOX_SEARCH_PROXIMITY: Type.Optional(Type.String({ minLength: 1 })),
@@ -173,6 +175,8 @@ export function parseEnv(input: RawEnvironment): Environment {
   const serviceRoleKey = optionalValue(input.SUPABASE_SERVICE_ROLE_KEY);
   const resendApiKey = optionalValue(input.RESEND_API_KEY);
   const multisetApiKey = optionalValue(input.MULTISET_API_KEY);
+  const multisetClientId = optionalValue(input.MULTISET_CLIENT_ID);
+  const multisetClientSecret = optionalValue(input.MULTISET_CLIENT_SECRET);
   const multisetApiBaseUrl = optionalValue(input.MULTISET_API_BASE_URL);
   const mapboxAccessToken = optionalValue(input.MAPBOX_ACCESS_TOKEN);
   const mapboxSearchProximity = optionalValue(input.MAPBOX_SEARCH_PROXIMITY);
@@ -252,6 +256,12 @@ export function parseEnv(input: RawEnvironment): Environment {
     ...(multisetApiKey === undefined
       ? {}
       : { MULTISET_API_KEY: multisetApiKey }),
+    ...(multisetClientId === undefined
+      ? {}
+      : { MULTISET_CLIENT_ID: multisetClientId }),
+    ...(multisetClientSecret === undefined
+      ? {}
+      : { MULTISET_CLIENT_SECRET: multisetClientSecret }),
     ...(multisetApiBaseUrl === undefined
       ? {}
       : { MULTISET_API_BASE_URL: multisetApiBaseUrl }),

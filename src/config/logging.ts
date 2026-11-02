@@ -15,6 +15,8 @@ export function getLoggerOptions(
         'SUPABASE_SERVICE_ROLE_KEY',
         'RESEND_API_KEY',
         'MULTISET_API_KEY',
+        'MULTISET_CLIENT_ID',
+        'MULTISET_CLIENT_SECRET',
         'MAPBOX_ACCESS_TOKEN',
       ],
       censor: '[REDACTED]',

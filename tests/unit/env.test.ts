@@ -10,6 +10,15 @@ const required = {
 };
 
 describe('parseEnv', () => {
+  it('allows missing and partial MultiSet credentials and parses a configured pair', () => {
+    const absent = parseEnv({ ...required, MULTISET_CLIENT_ID: ' ', MULTISET_CLIENT_SECRET: '' });
+    expect(absent.MULTISET_CLIENT_ID).toBeUndefined();
+    expect(absent.MULTISET_CLIENT_SECRET).toBeUndefined();
+    expect(parseEnv({ ...required, MULTISET_CLIENT_ID: 'test-client' }).MULTISET_CLIENT_ID).toBe('test-client');
+    expect(parseEnv({ ...required, MULTISET_CLIENT_ID: 'test-client', MULTISET_CLIENT_SECRET: 'test-secret' })).toMatchObject({
+      MULTISET_CLIENT_ID: 'test-client', MULTISET_CLIENT_SECRET: 'test-secret',
+    });
+  });
   it('applies development defaults and normalizes origins', () => {
     const env = parseEnv({
       ...required,
