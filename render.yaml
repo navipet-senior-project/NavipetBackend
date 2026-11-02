@@ -74,6 +74,10 @@ services:
         sync: false
       - key: RESEND_API_KEY
         sync: false
+      - key: MULTISET_CLIENT_ID
+        sync: false
+      - key: MULTISET_CLIENT_SECRET
+        sync: false
       - key: MULTISET_API_KEY
         sync: false
       - key: MULTISET_API_BASE_URL
