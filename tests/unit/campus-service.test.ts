@@ -393,6 +393,22 @@ describe('VEC room autocomplete', () => {
     });
   });
 
+  it('drops a pinless room whose building is not on the page', async () => {
+    const orphan = destination({
+      id: '00000000-0000-4000-8000-0000000009ff',
+      type: 'room',
+      name: 'VEC 119 Annex',
+      parentDestinationId: '00000000-0000-4000-8000-0000000000ee',
+      buildingCode: 'ANX',
+      roomNumber: '119',
+      metadata: {},
+    });
+    const result = await createCampusService(
+      gateways([rooms[0] as CampusDestinationRecord, orphan]),
+    ).autocomplete('VEC 119', 10);
+    expect(result.results.map((item) => item.title)).toEqual(['VEC 119']);
+  });
+
   it.each([
     ['VEC 11', ['VEC 119']],
     ['VEC 12', ['VEC 120', 'VEC 121', 'VEC 124', 'VEC 127', 'VEC 128']],
