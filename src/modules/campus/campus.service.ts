@@ -772,11 +772,13 @@ export function createCampusService(dependencies: CampusServiceDependencies) {
       const ranked = inheritListedBuildingPins(rankedDestinations).map(
         (destination) => toPublicCampusResult(destination),
       );
-      const routableLocal = ranked.filter(
-        (result) => hasOutdoorDestination(result) || result.type === 'room',
-      );
-      if (routableLocal.length > 0) {
-        return { query: query.display, results: routableLocal };
+      if (ranked.some(hasOutdoorDestination)) {
+        return {
+          query: query.display,
+          results: ranked.filter(
+            (result) => hasOutdoorDestination(result) || result.type === 'room',
+          ),
+        };
       }
 
       // Canonical records own the destination identity, so derive their missing
