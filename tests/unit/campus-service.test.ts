@@ -405,7 +405,7 @@ describe('VEC room autocomplete', () => {
     });
     const result = await createCampusService(
       gateways([rooms[0] as CampusDestinationRecord, orphan]),
-    ).autocomplete('VEC 119', 10);
+    ).autocomplete('VEC', 10);
     expect(result.results.map((item) => item.title)).toEqual(['VEC 119']);
   });
 
