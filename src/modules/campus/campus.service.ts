@@ -446,6 +446,27 @@ function hasOutdoorDestination(result: PublicCampusResult): boolean {
   return result.navigation?.outdoorDestination !== undefined;
 }
 
+// A pinned row in the same page used to hide every pinless room. VEC 119 was
+// the only room with its own pin, so a "VEC" page dropped the other rooms.
+function inheritListedBuildingPins(
+  destinations: CampusDestinationRecord[],
+): CampusDestinationRecord[] {
+  const buildings = new Map(
+    destinations
+      .filter((destination) => destination.type === 'building')
+      .map((destination) => [destination.id, destination]),
+  );
+  return destinations.map((destination) => {
+    const building =
+      destination.parentDestinationId === null
+        ? undefined
+        : buildings.get(destination.parentDestinationId);
+    return building === undefined
+      ? destination
+      : withBuildingPin(destination, building);
+  });
+}
+
 function withDerivedOutdoorDestination(
   result: PublicCampusResult,
   outdoor: ResolvedOutdoorDestination,
@@ -748,10 +769,12 @@ export function createCampusService(dependencies: CampusServiceDependencies) {
         )
         .slice(0, limit)
         .map(({ destination }) => destination);
-      const ranked = rankedDestinations.map((destination) =>
-        toPublicCampusResult(destination),
+      const ranked = inheritListedBuildingPins(rankedDestinations).map(
+        (destination) => toPublicCampusResult(destination),
       );
-      const routableLocal = ranked.filter(hasOutdoorDestination);
+      const routableLocal = ranked.filter(
+        (result) => hasOutdoorDestination(result) || result.type === 'room',
+      );
       if (routableLocal.length > 0) {
         return { query: query.display, results: routableLocal };
       }

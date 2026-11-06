@@ -326,6 +326,84 @@ describe('room building pins', () => {
   });
 });
 
+describe('VEC room autocomplete', () => {
+  const footprint = {
+    type: 'Polygon',
+    coordinates: [[[-118.111, 33.783], [-118.110, 33.783], [-118.110, 33.782], [-118.111, 33.783]]],
+  };
+  const building = destination({
+    id: '00000000-0000-4000-8000-0000000000b1',
+    code: 'VEC',
+    buildingCode: 'VEC',
+    name: 'Vivian Engineering Center',
+    outdoorDestinationLatitude: 33.78288325,
+    outdoorDestinationLongitude: -118.11034222,
+    arrivalRadiusMeters: 10,
+    metadata: { footprint },
+  });
+  const floor1 = ['119', '120', '121', '124', '127', '128', '132', '134', '136'];
+  const floor2 = ['201', '202', '215', '217', '218', '220', '224', '227'];
+  const rooms = [...floor1, ...floor2].map((roomNumber) => destination({
+    id: `00000000-0000-4000-8000-${roomNumber.padStart(12, '0')}`,
+    type: 'room',
+    name: `VEC ${roomNumber}`,
+    code: `VEC-${roomNumber}`,
+    aliases: [`Vivian Engineering Center ${roomNumber}`],
+    parentDestinationId: building.id,
+    parentName: building.name,
+    buildingCode: 'VEC',
+    roomNumber,
+    floorNumber: roomNumber.startsWith('1') ? '1' : '2',
+    ...(roomNumber === '119'
+      ? {
+          outdoorDestinationLatitude: 33.78288325,
+          outdoorDestinationLongitude: -118.11034222,
+        }
+      : {}),
+    indoorDestinationId: `VEC${roomNumber}`,
+    metadata: {},
+  }));
+
+  function vecService() {
+    const deps = gateways([building, ...rooms]);
+    deps.campusPlaces.searchBuildingRooms = vi.fn(
+      (buildingId: string, query: string, limit: number) =>
+        Promise.resolve(
+          rooms
+            .filter((room) =>
+              room.parentDestinationId === buildingId
+              && (room.roomNumber ?? '').toUpperCase().startsWith(query.toUpperCase()),
+            )
+            .slice(0, limit),
+        ),
+    );
+    return createCampusService(deps);
+  }
+
+  it('lists every floor-1 VEC room when only VEC 119 has its own pin', async () => {
+    const result = await vecService().autocomplete('VEC', 10);
+    expect(result.results.map((item) => item.title)).toEqual([
+      'Vivian Engineering Center',
+      ...floor1.map((roomNumber) => `VEC ${roomNumber}`),
+    ]);
+    const room120 = result.results.find((item) => item.title === 'VEC 120');
+    expect(room120?.navigation?.outdoorDestination).toEqual({
+      latitude: 33.78288325,
+      longitude: -118.11034222,
+    });
+  });
+
+  it.each([
+    ['VEC 11', ['VEC 119']],
+    ['VEC 12', ['VEC 120', 'VEC 121', 'VEC 124', 'VEC 127', 'VEC 128']],
+    ['VEC 2', floor2.map((roomNumber) => `VEC ${roomNumber}`)],
+    ...[...floor1, ...floor2].map((roomNumber) => [`VEC ${roomNumber}`, [`VEC ${roomNumber}`]] as const),
+  ])('autocompletes %s', async (query, titles) => {
+    const result = await vecService().autocomplete(query, 10);
+    expect(result.results.map((item) => item.title)).toEqual(titles);
+  });
+});
+
 describe('campus autocomplete service', () => {
   it('exposes verified residence buildings as housing', async () => {
     const housing = destination({
