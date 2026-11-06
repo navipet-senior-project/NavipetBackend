@@ -409,11 +409,13 @@ describe('VEC room autocomplete', () => {
     expect(result.results.map((item) => item.title)).toEqual(['VEC 119']);
   });
 
-  it.each([
+  it.each<[string, string[]]>([
     ['VEC 11', ['VEC 119']],
     ['VEC 12', ['VEC 120', 'VEC 121', 'VEC 124', 'VEC 127', 'VEC 128']],
     ['VEC 2', floor2.map((roomNumber) => `VEC ${roomNumber}`)],
-    ...[...floor1, ...floor2].map((roomNumber) => [`VEC ${roomNumber}`, [`VEC ${roomNumber}`]] as const),
+    ...[...floor1, ...floor2].map(
+      (roomNumber): [string, string[]] => [`VEC ${roomNumber}`, [`VEC ${roomNumber}`]],
+    ),
   ])('autocompletes %s', async (query, titles) => {
     const result = await vecService().autocomplete(query, 10);
     expect(result.results.map((item) => item.title)).toEqual(titles);
