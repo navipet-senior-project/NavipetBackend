@@ -134,6 +134,7 @@ interface ToolState {
 export function createElbeeService(deps: ElbeeDeps) {
   const inflight = new Map<string, Promise<ElbeeResponse>>();
   const replay = new Map<string, ElbeeResponse>();
+  let replayDay: string | null = null;
 
   async function ask(input: ElbeeAsk): Promise<ElbeeResponse> {
     const question = input.question.trim();
@@ -144,7 +145,12 @@ export function createElbeeService(deps: ElbeeDeps) {
         message: 'Question must be 1 to 500 characters.',
       });
     }
-    const key = input.clientRequestId === null ? null : `${input.userId}:${input.clientRequestId}`;
+    const day = laClock(deps.now()).day;
+    if (replayDay !== day) {
+      replay.clear();
+      replayDay = day;
+    }
+    const key = input.clientRequestId === null ? null : `${day}:${input.userId}:${input.clientRequestId}`;
     if (key === null) return run(input, question);
     const saved = replay.get(key);
     if (saved !== undefined) return saved;
@@ -159,7 +165,7 @@ export function createElbeeService(deps: ElbeeDeps) {
     inflight.set(key, gate);
     try {
       const response = await run(input, question);
-      replay.set(key, response);
+      if (replayDay === day) replay.set(key, response);
       resolveGate(response);
       return response;
     } catch (cause) {
@@ -287,8 +293,8 @@ async function toolLoop(deps: ElbeeDeps, input: ElbeeAsk, question: string): Pro
     closed = true;
     if (reservations.length === 0) return response;
     const [first, ...rest] = reservations;
-    if (first !== undefined) await ledger.finish(first, input.userId, 'settled', response);
-    await Promise.all(rest.map((id) => ledger.finish(id, input.userId, 'settled', null)));
+    if (first !== undefined) await ledger.finish(first, input.userId, 'settled');
+    await Promise.all(rest.map((id) => ledger.finish(id, input.userId, 'settled')));
     return response;
   };
   try {
@@ -308,11 +314,12 @@ async function toolLoop(deps: ElbeeDeps, input: ElbeeAsk, question: string): Pro
           : await settle(budgetExhausted(deps.provider));
       }
       if (reserved.duplicate) {
-        if (reserved.response !== null) return reserved.response;
         throw new AppError({
           code: ErrorCode.CONFLICT,
           statusCode: 409,
-          message: 'This request id is already running.',
+          message: reserved.pending
+            ? 'This request id is already running.'
+            : 'This request id was already processed.',
         });
       }
       reservations.push(reserved.id);

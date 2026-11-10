@@ -2,7 +2,6 @@ import { randomUUID } from 'node:crypto';
 
 import type { SupabaseClient } from '@supabase/supabase-js';
 
-import { restoreElbeeResponse, type ElbeeResponse } from './elbee.types.js';
 import { laClock } from './elbee.clock.js';
 
 export interface BudgetReserveInput {
@@ -20,7 +19,6 @@ export type BudgetReserveResult =
       id: string;
       duplicate: boolean;
       pending: boolean;
-      response: ElbeeResponse | null;
     }
   | { ok: false; reason: 'exhausted' };
 
@@ -30,7 +28,6 @@ export interface BudgetLedger {
     reservationId: string,
     userId: string,
     status: 'settled' | 'released',
-    response: ElbeeResponse | null,
   ): Promise<void>;
 }
 
@@ -41,7 +38,6 @@ interface MemoryRow {
   day: string;
   micros: number;
   status: 'reserved' | 'released' | 'settled';
-  response: ElbeeResponse | null;
 }
 
 export function createMemoryBudgetLedger(): BudgetLedger {
@@ -75,7 +71,6 @@ export function createMemoryBudgetLedger(): BudgetLedger {
               id: existing.id,
               duplicate: true,
               pending: existing.status === 'reserved',
-              response: existing.response,
             };
           }
         }
@@ -97,7 +92,6 @@ export function createMemoryBudgetLedger(): BudgetLedger {
           day,
           micros: input.micros,
           status: 'reserved',
-          response: null,
         };
         rows.push(row);
         return {
@@ -105,18 +99,16 @@ export function createMemoryBudgetLedger(): BudgetLedger {
           id: row.id,
           duplicate: false,
           pending: false,
-          response: null,
         };
       });
     },
-    finish(reservationId, userId, status, response) {
+    finish(reservationId, userId, status) {
       return exclusive(() => {
         const row = rows.find((item) => item.id === reservationId && item.userId === userId);
         if (row === undefined || row.status !== 'reserved') {
           throw new Error('elbee reservation not open');
         }
         row.status = status;
-        row.response = status === 'settled' ? response : null;
       });
     },
   };
@@ -139,12 +131,11 @@ export function createSupabaseBudgetLedger(admin: SupabaseClient): BudgetLedger 
       if (response.error !== null) throw new Error('Elbee budget reserve failed');
       return parseReserve(response.data);
     },
-    async finish(reservationId, userId, status, response) {
+    async finish(reservationId, userId, status) {
       const result = (await admin.rpc('elbee_finish_budget', {
         p_reservation_id: reservationId,
         p_user_id: userId,
         p_status: status,
-        p_response: response,
       })) as { error: { message: string } | null };
       if (result.error !== null) throw new Error('Elbee budget finish failed');
     },
@@ -162,8 +153,5 @@ function parseReserve(value: unknown): BudgetReserveResult {
     id: value.id,
     duplicate: value.duplicate,
     pending: value.pending === true,
-    response: value.response === null || value.response === undefined
-      ? null
-      : restoreElbeeResponse(value.response),
   };
 }

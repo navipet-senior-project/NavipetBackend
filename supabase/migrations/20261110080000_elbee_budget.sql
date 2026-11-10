@@ -17,7 +17,6 @@ create table if not exists public.elbee_budget_reservations (
   day date not null,
   micros bigint not null check (micros > 0),
   status text not null check (status in ('reserved', 'released', 'settled')),
-  response jsonb,
   created_at timestamptz not null default now(),
   constraint elbee_budget_request_id_check
     check (client_request_id is null or char_length(client_request_id) between 8 and 80)
@@ -81,8 +80,7 @@ begin
         'ok', true,
         'id', v_existing.id,
         'duplicate', true,
-        'pending', v_existing.status = 'reserved',
-        'response', v_existing.response
+        'pending', v_existing.status = 'reserved'
       );
     end if;
   end if;
@@ -106,8 +104,7 @@ begin
     'ok', true,
     'id', v_id,
     'duplicate', false,
-    'pending', false,
-    'response', null
+    'pending', false
   );
 end;
 $$;
@@ -115,8 +112,7 @@ $$;
 create or replace function public.elbee_finish_budget(
   p_reservation_id uuid,
   p_user_id uuid,
-  p_status text,
-  p_response jsonb
+  p_status text
 ) returns void
 language plpgsql
 security definer
@@ -129,8 +125,7 @@ begin
     raise exception 'invalid elbee budget status';
   end if;
   update public.elbee_budget_reservations
-  set status = p_status,
-      response = case when p_status = 'settled' then p_response else null end
+  set status = p_status
   where id = p_reservation_id
     and user_id = p_user_id
     and status = 'reserved';
@@ -143,7 +138,7 @@ $$;
 
 revoke all on function public.elbee_reserve_budget(uuid, text, bigint, bigint, bigint)
   from public, anon, authenticated;
-revoke all on function public.elbee_finish_budget(uuid, uuid, text, jsonb)
+revoke all on function public.elbee_finish_budget(uuid, uuid, text)
   from public, anon, authenticated;
 grant execute on function public.elbee_reserve_budget(uuid, text, bigint, bigint, bigint) to service_role;
-grant execute on function public.elbee_finish_budget(uuid, uuid, text, jsonb) to service_role;
+grant execute on function public.elbee_finish_budget(uuid, uuid, text) to service_role;

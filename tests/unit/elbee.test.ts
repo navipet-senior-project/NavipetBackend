@@ -375,6 +375,23 @@ describe('elbee', () => {
     expect(reserve).toHaveBeenCalledOnce();
   });
 
+  it('reuses a request id after the Los Angeles day changes', async () => {
+    let current = new Date('2026-11-11T07:59:00.000Z');
+    const model = {
+      complete: vi.fn(() =>
+        Promise.resolve({ text: '', toolUses: [{ id: 'end', name: 'finish', input: { placeIds: [] } }] }),
+      ),
+    };
+    const service = createElbeeService(
+      deps({ provider: 'mock', model, ledger: createMemoryBudgetLedger(), now: () => current }),
+    );
+    const ask = { ...baseAsk, clientRequestId: 'next-day-request', question: 'library' };
+    await service.ask(ask);
+    current = new Date('2026-11-11T08:01:00.000Z');
+    await service.ask(ask);
+    expect(model.complete).toHaveBeenCalledTimes(2);
+  });
+
   it('returns unavailable when the model does not finish before the loop timeout', async () => {
     const model: ElbeeModel = {
       complete(turn): Promise<never> {
