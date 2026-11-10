@@ -23,6 +23,7 @@ import recentSearchesRoutes from './modules/recent-searches/recent-searches.rout
 import classesRoutes from './modules/classes/classes.routes.js';
 import profilesRoutes from './modules/profiles/profiles.routes.js';
 import accessibilityRoutes from './modules/accessibility/accessibility.routes.js';
+import elbeeRoutes, { type ElbeeOverrides } from './modules/elbee/elbee.routes.js';
 import authPlugin, {
   SupabaseJwtVerifier,
   type JwtVerifier,
@@ -44,6 +45,7 @@ export interface BuildAppOptions {
   authVerifier?: JwtVerifier;
   supabaseResources?: SupabaseResources;
   externalPlaces?: ExternalPlacesGateway;
+  elbee?: ElbeeOverrides;
 }
 
 export async function buildApp(
@@ -67,6 +69,7 @@ export async function buildApp(
 
   app.setValidatorCompiler(TypeBoxValidatorCompiler);
   app.decorate('config', config);
+  app.decorate('elbeeOverrides', options.elbee ?? {});
   if (prettyLogging) {
     const errors = new WeakMap<FastifyRequest, Error>();
     app.addHook('onError', (request, _reply, error, done) => {
@@ -123,6 +126,7 @@ export async function buildApp(
   await app.register(profilesRoutes);
   await app.register(accessibilityRoutes);
   await app.register(healthRoutes);
+  await app.register(elbeeRoutes);
 
   return app;
 }

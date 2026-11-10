@@ -4,6 +4,7 @@ import type { Environment } from '../config/env.js';
 import type { AuthenticatedUser } from '../plugins/auth.js';
 import type { SupabaseResources } from '../plugins/supabase.js';
 import type { ExternalPlacesGateway } from '../modules/campus/campus.types.js';
+import type { ElbeeOverrides } from '../modules/elbee/elbee.routes.js';
 import type { preHandlerAsyncHookHandler } from 'fastify';
 
 declare module 'fastify' {
@@ -11,6 +12,7 @@ declare module 'fastify' {
     config: Environment;
     supabase: SupabaseResources;
     externalPlaces: ExternalPlacesGateway;
+    elbeeOverrides: ElbeeOverrides;
     authenticate: preHandlerAsyncHookHandler;
     authenticateRecovery: preHandlerAsyncHookHandler;
   }
