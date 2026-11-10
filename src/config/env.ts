@@ -69,6 +69,14 @@ const EnvironmentSchema = Type.Object(
     MAPBOX_ACCESS_TOKEN: Type.Optional(Type.String({ minLength: 1 })),
     MAPBOX_SEARCH_PROXIMITY: Type.Optional(Type.String({ minLength: 1 })),
     MAPBOX_SEARCH_BBOX: Type.Optional(Type.String({ minLength: 1 })),
+    ELBEE_PROVIDER: Type.Union([
+      Type.Literal('disabled'),
+      Type.Literal('anthropic'),
+    ]),
+    ANTHROPIC_API_KEY: Type.Optional(Type.String({ minLength: 1 })),
+    ELBEE_MODEL: Type.Optional(Type.String({ minLength: 1 })),
+    ELBEE_GLOBAL_DAILY_MICROS: Type.Integer({ minimum: 0 }),
+    ELBEE_USER_DAILY_MICROS: Type.Integer({ minimum: 0 }),
     CORS_ORIGINS: Type.Array(HttpUrl),
   },
   { additionalProperties: false },
@@ -181,6 +189,8 @@ export function parseEnv(input: RawEnvironment): Environment {
   const mapboxAccessToken = optionalValue(input.MAPBOX_ACCESS_TOKEN);
   const mapboxSearchProximity = optionalValue(input.MAPBOX_SEARCH_PROXIMITY);
   const mapboxSearchBbox = optionalValue(input.MAPBOX_SEARCH_BBOX);
+  const anthropicApiKey = optionalValue(input.ANTHROPIC_API_KEY);
+  const elbeeModel = optionalValue(input.ELBEE_MODEL);
 
   const candidate = {
     NODE_ENV: nodeEnv,
@@ -274,6 +284,11 @@ export function parseEnv(input: RawEnvironment): Environment {
     ...(mapboxSearchBbox === undefined
       ? {}
       : { MAPBOX_SEARCH_BBOX: mapboxSearchBbox }),
+    ELBEE_PROVIDER: optionalValue(input.ELBEE_PROVIDER) ?? 'disabled',
+    ELBEE_GLOBAL_DAILY_MICROS: parseInteger(input.ELBEE_GLOBAL_DAILY_MICROS, 0),
+    ELBEE_USER_DAILY_MICROS: parseInteger(input.ELBEE_USER_DAILY_MICROS, 0),
+    ...(anthropicApiKey === undefined ? {} : { ANTHROPIC_API_KEY: anthropicApiKey }),
+    ...(elbeeModel === undefined ? {} : { ELBEE_MODEL: elbeeModel }),
   };
 
   try {
@@ -299,6 +314,8 @@ export function parseEnv(input: RawEnvironment): Environment {
         parsed.MAPBOX_SEARCH_PROXIMITY,
         parsed.MAPBOX_SEARCH_BBOX,
       ) ||
+      (parsed.ELBEE_GLOBAL_DAILY_MICROS > 0 &&
+        parsed.ELBEE_USER_DAILY_MICROS > parsed.ELBEE_GLOBAL_DAILY_MICROS) ||
       ([
         parsed.MAPBOX_ACCESS_TOKEN,
         parsed.MAPBOX_SEARCH_PROXIMITY,

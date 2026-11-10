@@ -18,6 +18,7 @@ export function getLoggerOptions(
         'MULTISET_CLIENT_ID',
         'MULTISET_CLIENT_SECRET',
         'MAPBOX_ACCESS_TOKEN',
+        'ANTHROPIC_API_KEY',
       ],
       censor: '[REDACTED]',
     },
@@ -51,7 +52,7 @@ export function requestLogUrl(url: string): string {
     return '/autocomplete?[REDACTED]';
   }
   for (const key of [...parsed.searchParams.keys()]) {
-    if (/token|password|authorization|cookie|secret|api.?key|otp|code|^(?:lat|latitude|lng|lon|longitude|location)$/i.test(key)) {
+    if (/token|password|authorization|cookie|secret|api.?key|otp|code|question|^(?:lat|latitude|lng|lon|longitude|location)$/i.test(key)) {
       parsed.searchParams.set(key, '[REDACTED]');
     }
   }

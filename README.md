@@ -174,6 +174,16 @@ Flutter application, committed to source control, or exposed to clients.
 Sensitive request headers and configured secrets are redacted from backend
 logs.
 
+## Elbee campus assistant
+
+`POST /elbee/ask` answers a CSULB building, room, next-class, or parking-rules question for the verified user. Cards carry a campus `placeId` and no coordinates. The client taps a card and uses the existing navigation flow. This route does not start navigation, write the schedule, or fetch arbitrary URLs.
+
+The live model stays off unless every one of these is set on the server: `ELBEE_PROVIDER=anthropic`, `ANTHROPIC_API_KEY`, `ELBEE_MODEL` (`claude-haiku-5-5` or `claude-sonnet-5-5`), `ELBEE_GLOBAL_DAILY_MICROS` and `ELBEE_USER_DAILY_MICROS` (user cap at or below the global cap), `SUPABASE_SERVICE_ROLE_KEY`, and the migration `supabase/migrations/20261110080000_elbee_budget.sql` applied to that project. This repository does not apply that migration and does not spend API credit. Missing any item keeps `provider` at `disabled` and answers from campus search. A configured key alone does not promise a later call is free.
+
+Each provider call reserves its worst-case price (published global token prices times 1.1) against the Los Angeles daily caps before the call. Question text, schedule rows, token counts, and precise location are not written to logs. Budget reservations store no assistant response or schedule content. If a reservation cannot be finalized, it stays pending, consumes that day's cap, and its request ID remains unavailable; there is no automatic recovery. Parking copy is dated 2026-11-10, source-cited, and not permission to park. Contradictory official lists are not merged. There is no indoor route graph and no step-free route.
+
+The key stays in the server environment. Do not put it in the client, logs, or this repository.
+
 ## Indoor AR token exchange
 
 `POST /indoor/ar-token` requires the same standard Supabase bearer session as

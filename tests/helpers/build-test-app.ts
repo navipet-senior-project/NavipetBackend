@@ -29,6 +29,9 @@ export const TEST_ENV: Environment = Object.freeze({
   SUPABASE_ANON_KEY: 'test-anon-key',
   SUPABASE_JWT_ISSUER: 'https://project-ref.supabase.co/auth/v1',
   SUPABASE_JWT_AUDIENCE: 'authenticated',
+  ELBEE_PROVIDER: 'disabled',
+  ELBEE_GLOBAL_DAILY_MICROS: 0,
+  ELBEE_USER_DAILY_MICROS: 0,
   CORS_ORIGINS: [],
 });
 
