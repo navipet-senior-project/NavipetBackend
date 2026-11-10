@@ -71,7 +71,6 @@ const EnvironmentSchema = Type.Object(
     MAPBOX_SEARCH_BBOX: Type.Optional(Type.String({ minLength: 1 })),
     ELBEE_PROVIDER: Type.Union([
       Type.Literal('disabled'),
-      Type.Literal('demo'),
       Type.Literal('anthropic'),
     ]),
     ANTHROPIC_API_KEY: Type.Optional(Type.String({ minLength: 1 })),

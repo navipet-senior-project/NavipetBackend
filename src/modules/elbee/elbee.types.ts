@@ -1,4 +1,4 @@
-export type ElbeeProvider = 'disabled' | 'demo' | 'mock' | 'anthropic';
+export type ElbeeProvider = 'disabled' | 'mock' | 'anthropic';
 
 export type ElbeeStatus =
   | 'ok'
@@ -7,8 +7,7 @@ export type ElbeeStatus =
   | 'off_topic'
   | 'budget_exhausted'
   | 'consent_required'
-  | 'unavailable'
-  | 'demo';
+  | 'unavailable';
 
 export interface DestinationCard {
   placeId: string;
@@ -60,7 +59,6 @@ export interface ElbeeResponse {
 export const ELBEE_DISCLOSURE = {
   disabled:
     "NaviPet's Elbee. The live model is off. Cards are verified campus records, not a model reply. This is not the university parking chatbot.",
-  demo: "Demo data. Not a live model. NaviPet's Elbee is not the university parking chatbot.",
   mock: "NaviPet's Elbee test model. Not a live Anthropic call. This is not the university parking chatbot.",
   anthropic:
     "NaviPet's Elbee is an AI assistant for CSULB campus places. It is not the university parking chatbot. Tap a card to start navigation.",
@@ -74,7 +72,6 @@ const STATUSES = new Set<string>([
   'budget_exhausted',
   'consent_required',
   'unavailable',
-  'demo',
 ]);
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -103,7 +100,7 @@ export function restoreElbeeResponse(value: unknown): ElbeeResponse | null {
   const provider = value.provider;
   const status = value.status;
   if (
-    (provider !== 'disabled' && provider !== 'demo' && provider !== 'mock' && provider !== 'anthropic') ||
+    (provider !== 'disabled' && provider !== 'mock' && provider !== 'anthropic') ||
     typeof value.liveModel !== 'boolean' ||
     typeof value.modelOutputAccepted !== 'boolean' ||
     typeof status !== 'string' ||

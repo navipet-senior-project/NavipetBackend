@@ -108,7 +108,6 @@ export interface ElbeeAsk {
   question: string;
   scheduleConsent: boolean;
   clientRequestId: string | null;
-  mode: 'ask' | 'demo';
 }
 
 export interface ElbeeDeps {
@@ -123,7 +122,6 @@ export interface ElbeeDeps {
   now: () => Date;
   loopTimeoutMs: number;
   toolTimeoutMs: number;
-  forceDemo: boolean;
 }
 
 interface ToolState {
@@ -146,7 +144,6 @@ export function createElbeeService(deps: ElbeeDeps) {
         message: 'Question must be 1 to 500 characters.',
       });
     }
-    if (input.mode === 'demo' || deps.forceDemo) return demo(deps);
     const key = input.clientRequestId === null ? null : `${input.userId}:${input.clientRequestId}`;
     if (key === null) return run(input, question);
     const saved = replay.get(key);
@@ -179,28 +176,6 @@ export function createElbeeService(deps: ElbeeDeps) {
   }
 
   return { ask };
-}
-
-async function demo(deps: ElbeeDeps): Promise<ElbeeResponse> {
-  const found = await deps.campus.searchDestinations('library', 1);
-  const cards: DestinationCard[] = [];
-  const first = found[0];
-  if (first !== undefined) {
-    const card = await cardFor(deps, first.id);
-    if (card !== null) cards.push(card);
-  }
-  return {
-    provider: 'demo',
-    liveModel: false,
-    modelOutputAccepted: false,
-    status: 'demo',
-    disclosure: ELBEE_DISCLOSURE.demo,
-    explanation: 'Demo data. Not a live model. Tap a card only if you want the existing navigation flow.',
-    clarifyingQuestion: null,
-    cards,
-    parking: null,
-    nextClass: null,
-  };
 }
 
 async function deterministic(

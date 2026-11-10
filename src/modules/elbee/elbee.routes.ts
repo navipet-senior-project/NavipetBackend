@@ -28,7 +28,7 @@ const elbeeRoutes: FastifyPluginCallbackTypebox = (fastify, _options, done) => {
   const live = elbeeLiveReady(fastify.config, admin !== null);
   const modelId = elbeeModelId(fastify.config.ELBEE_MODEL) ?? 'claude-haiku-5-5';
   const injected = overrides.model !== undefined;
-  const provider = injected ? 'mock' : live ? 'anthropic' : fastify.config.ELBEE_PROVIDER === 'demo' ? 'demo' : 'disabled';
+  const provider = injected ? 'mock' : live ? 'anthropic' : 'disabled';
   const model =
     injected
       ? overrides.model ?? null
@@ -53,7 +53,6 @@ const elbeeRoutes: FastifyPluginCallbackTypebox = (fastify, _options, done) => {
     now: overrides.now ?? (() => new Date()),
     loopTimeoutMs: overrides.loopTimeoutMs ?? 12_000,
     toolTimeoutMs: overrides.toolTimeoutMs ?? 3_000,
-    forceDemo: fastify.config.ELBEE_PROVIDER === 'demo',
   });
 
   fastify.post(
@@ -87,7 +86,6 @@ const elbeeRoutes: FastifyPluginCallbackTypebox = (fastify, _options, done) => {
         question: request.body.question,
         scheduleConsent: request.body.scheduleConsent,
         clientRequestId: request.body.clientRequestId ?? null,
-        mode: request.body.mode ?? 'ask',
       });
     },
   );

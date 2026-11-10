@@ -34,7 +34,6 @@ const ElbeeResponseSchema = Type.Object(
   {
     provider: Type.Union([
       Type.Literal('disabled'),
-      Type.Literal('demo'),
       Type.Literal('mock'),
       Type.Literal('anthropic'),
     ]),
@@ -48,7 +47,6 @@ const ElbeeResponseSchema = Type.Object(
       Type.Literal('budget_exhausted'),
       Type.Literal('consent_required'),
       Type.Literal('unavailable'),
-      Type.Literal('demo'),
     ]),
     disclosure: Type.String(),
     explanation: Type.String(),
@@ -87,14 +85,12 @@ export const ElbeeAskRouteSchema = {
   summary: "Ask NaviPet's Elbee for a verified CSULB destination",
   description:
     'Standard bearer session. Returns verified campus cards and optional dated parking rules. ' +
-    'Does not start navigation, return coordinates, or call Anthropic unless the server is explicitly configured with a key, an allowlisted model, and daily budget caps. ' +
-    'mode=demo is labeled demo data and is not a live model.',
+    'Does not start navigation, return coordinates, or call Anthropic unless the server is explicitly configured with a key, an allowlisted model, and daily budget caps.',
   security: [{ bearerAuth: [] }],
   body: Type.Object(
     {
       question: Type.String({ minLength: 1, maxLength: 500 }),
       scheduleConsent: Type.Boolean(),
-      mode: Type.Optional(Type.Union([Type.Literal('ask'), Type.Literal('demo')])),
       clientRequestId: Type.Optional(Type.String({ pattern: '^[A-Za-z0-9_-]{8,80}$' })),
     },
     { additionalProperties: false },
