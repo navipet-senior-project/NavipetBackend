@@ -133,8 +133,6 @@ interface ToolState {
 
 export function createElbeeService(deps: ElbeeDeps) {
   const inflight = new Map<string, Promise<ElbeeResponse>>();
-  const replay = new Map<string, ElbeeResponse>();
-  let replayDay: string | null = null;
 
   async function ask(input: ElbeeAsk): Promise<ElbeeResponse> {
     const question = input.question.trim();
@@ -146,14 +144,8 @@ export function createElbeeService(deps: ElbeeDeps) {
       });
     }
     const day = laClock(deps.now()).day;
-    if (replayDay !== day) {
-      replay.clear();
-      replayDay = day;
-    }
     const key = input.clientRequestId === null ? null : `${day}:${input.userId}:${input.clientRequestId}`;
     if (key === null) return run(input, question);
-    const saved = replay.get(key);
-    if (saved !== undefined) return saved;
     const running = inflight.get(key);
     if (running !== undefined) return running;
     let resolveGate: (response: ElbeeResponse) => void = () => undefined;
@@ -165,7 +157,6 @@ export function createElbeeService(deps: ElbeeDeps) {
     inflight.set(key, gate);
     try {
       const response = await run(input, question);
-      if (replayDay === day) replay.set(key, response);
       resolveGate(response);
       return response;
     } catch (cause) {
@@ -496,7 +487,7 @@ async function readNextClass(deps: ElbeeDeps, accessToken: string): Promise<Next
 export function pickNextClass(classes: readonly ClassRecord[], now: Date): ClassRecord | null {
   const clock = laClock(now);
   const laterToday = classes
-    .filter((item) => item.weekdays.includes(clock.weekday) && clockMinutes(item.endTime) > clock.minutes)
+    .filter((item) => item.weekdays.includes(clock.weekday) && clockMinutes(item.startTime) > clock.minutes)
     .sort(byStart);
   const today = laterToday[0];
   if (today !== undefined) return today;

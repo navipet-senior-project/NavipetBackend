@@ -265,6 +265,44 @@ describe('elbee', () => {
     expect(other.status).toBe('no_match');
   });
 
+  it('does not replay completed schedule responses', async () => {
+    const listClasses = vi.fn().mockResolvedValueOnce([klass()]).mockResolvedValueOnce([]);
+    const service = createElbeeService(deps({ listClasses }));
+    const ask = {
+      ...baseAsk,
+      clientRequestId: 'schedule-request',
+      scheduleConsent: true,
+      question: 'Where is my next class?',
+    };
+    const first = await service.ask(ask);
+    const second = await service.ask(ask);
+    expect(first.nextClass?.courseCode).toBe('CECS 327');
+    expect(second.nextClass).toBeNull();
+    expect(listClasses).toHaveBeenCalledTimes(2);
+  });
+
+  it('skips a class already in progress when choosing the next class', async () => {
+    const ongoing = klass();
+    const later = klass({
+      id: '00000000-0000-4000-8000-0000000000f2',
+      courseCode: 'CECS 328',
+      startTime: '15:00:00',
+      endTime: '16:15:00',
+    });
+    const service = createElbeeService(
+      deps({
+        now: () => new Date('2026-11-10T21:30:00.000Z'),
+        listClasses: vi.fn().mockResolvedValue([ongoing, later]),
+      }),
+    );
+    const response = await service.ask({
+      ...baseAsk,
+      scheduleConsent: true,
+      question: 'Where is my next class?',
+    });
+    expect(response.nextClass?.courseCode).toBe('CECS 328');
+  });
+
   it('drops invented ids and malformed tool arguments, and keeps schedule text untrusted', async () => {
     const seen: string[] = [];
     const model: ElbeeModel = {
