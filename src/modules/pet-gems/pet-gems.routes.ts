@@ -66,32 +66,6 @@ const petGemsRoutes: FastifyPluginCallbackTypebox = (fastify, _options, done) =>
     },
   }, async request => ({ costumes: await rpc<Costume[]>(request.accessToken as string, 'get_pet_costumes') }));
 
-  fastify.get('/pet/gems/export', {
-    preHandler: fastify.authenticate,
-    schema: {
-      ...schema('Export pet gems and costumes as formatted JSON'),
-      querystring: Type.Object({ download: Type.Optional(Type.Literal('1')) }, { additionalProperties: false }),
-      response: { ...errors, 200: Type.Object({
-        ...wallet.properties,
-        ownedOutfits: Type.Array(Type.String()),
-        costumes: Type.Array(Type.Object({
-          id: Type.String(), name: Type.String(), price: Type.Integer(), assetReference: Type.String(), owned: Type.Boolean(),
-        })),
-      }) },
-    },
-  }, async (request, reply) => {
-    const token = request.accessToken as string;
-    const [gems, costumes] = await Promise.all([
-      rpc<{ balance: number; equippedOutfit: string | null; ownedOutfits: string[] }>(token, 'get_pet_gems'),
-      rpc<Costume[]>(token, 'get_pet_costumes'),
-    ]);
-    reply.header('Cache-Control', 'private, no-store').type('application/json');
-    if (request.query.download === '1') {
-      reply.header('Content-Disposition', 'attachment; filename="pet-gems.json"');
-    }
-    return reply.serializer((payload) => JSON.stringify(payload, null, 2)).send({ ...gems, costumes });
-  });
-
   function outcome(result: PurchaseResult) {
     if (result.status === 'not_found') throw new AppError({
       code: ErrorCode.NOT_FOUND, statusCode: 404, message: 'Costume not found or not owned',

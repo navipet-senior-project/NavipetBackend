@@ -36,25 +36,6 @@ describe('pet gems', () => {
     const response = await app.inject({ method: 'GET', url: '/pet/costumes', headers });
     expect(response.json()).toEqual({ costumes: [{ id: 'hat', name: 'Hat', price: 10, assetReference: 'hat.png', owned: false }] });
   });
-  it('exports formatted current-user data and offers the same JSON as a download', async () => {
-    const state = { balance: 12, equippedOutfit: 'hat', ownedOutfits: ['hat'] };
-    const costumes = [{ id: 'hat', name: 'Hat', price: 10, assetReference: 'hat.png', owned: true }];
-    const { app, rpc, forAccessToken } = await setup(null);
-    rpc.mockImplementation((name: string) => Promise.resolve({
-      data: name === 'get_pet_gems' ? state : costumes, error: null,
-    }));
-    expect((await app.inject({ method: 'GET', url: '/pet/gems/export' })).statusCode).toBe(401);
-    const inline = await app.inject({ method: 'GET', url: '/pet/gems/export', headers });
-    const download = await app.inject({ method: 'GET', url: '/pet/gems/export?download=1', headers });
-    expect(inline.statusCode).toBe(200);
-    expect(inline.body).toBe(JSON.stringify({ ...state, costumes }, null, 2));
-    expect(inline.headers['content-type']).toMatch(/^application\/json/);
-    expect(inline.headers['content-disposition']).toBeUndefined();
-    expect(download.body).toBe(inline.body);
-    expect(download.headers['content-type']).toMatch(/^application\/json/);
-    expect(download.headers['content-disposition']).toBe('attachment; filename="pet-gems.json"');
-    expect(forAccessToken).toHaveBeenCalledWith('token');
-  });
   it('buys and equips with one RPC and rejects client prices', async () => {
     const { app, rpc } = await setup({ status: 'ok', balance: 10, equippedOutfit: 'hat' });
     const response = await app.inject({ method: 'POST', url: '/pet/costumes/buy', headers, payload: { outfitId: 'hat', equip: true } });

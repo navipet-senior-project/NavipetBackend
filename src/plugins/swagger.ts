@@ -25,9 +25,40 @@ const swaggerPlugin: FastifyPluginAsync = async (fastify) => {
       },
     },
   });
+  fastify.get('/docs/openapi.json', {
+    schema: { hide: true },
+  }, async (_request, reply) => reply
+    .header('Content-Disposition', 'attachment; filename="openapi.json"')
+    .type('application/json')
+    .send(JSON.stringify(fastify.swagger(), null, 2)));
+
   await fastify.register(swaggerUi, {
     routePrefix: '/docs',
     staticCSP: true,
+    theme: {
+      js: [{
+        filename: 'download-openapi.js',
+        content: `
+          const section = document.createElement('section');
+          section.className = 'openapi-download';
+          const link = document.createElement('a');
+          const path = window.location.pathname;
+          link.href = (path.endsWith('/') ? path : path + '/') + 'openapi.json';
+          link.className = 'openapi-download-button';
+          link.textContent = '↓ Download OpenAPI JSON';
+          section.appendChild(link);
+          document.body.insertBefore(section, document.getElementById('swagger-ui'));
+        `,
+      }],
+      css: [{
+        filename: 'download-openapi.css',
+        content: `
+          .openapi-download { max-width: 1460px; margin: 24px auto 0; padding: 0 20px; }
+          .openapi-download-button { display: inline-block; padding: 8px 14px; border: 1px solid #888; border-radius: 4px; color: #444; background: #fff; font: 600 14px sans-serif; text-decoration: none; }
+          .openapi-download-button:hover { background: #f1f1f1; }
+        `,
+      }],
+    },
   });
 };
 
