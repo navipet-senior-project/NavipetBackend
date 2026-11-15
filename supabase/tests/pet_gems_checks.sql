@@ -1,9 +1,34 @@
 -- Run on a disposable database after applying migrations, using psql -v ON_ERROR_STOP=1.
 begin;
 insert into auth.users (id) values ('71d892d2-3fb4-44a1-8e00-000000000001'), ('71d892d2-3fb4-44a1-8e00-000000000002'), ('71d892d2-3fb4-44a1-8e00-000000000003');
+insert into auth.users (id) values ('71d892d2-3fb4-44a1-8e00-000000000004'), ('71d892d2-3fb4-44a1-8e00-000000000005'), ('71d892d2-3fb4-44a1-8e00-000000000006');
+insert into public.profiles (id, gems) values
+  ('71d892d2-3fb4-44a1-8e00-000000000004', 300),
+  ('71d892d2-3fb4-44a1-8e00-000000000005', 300),
+  ('71d892d2-3fb4-44a1-8e00-000000000006', 300)
+on conflict (id) do update set gems = excluded.gems;
+insert into public.point_wallets (user_id, balance) values ('71d892d2-3fb4-44a1-8e00-000000000005', 5);
+update public.profiles set gems = 300 where id = '71d892d2-3fb4-44a1-8e00-000000000005';
+-- Reapply to exercise both backfill paths and idempotence.
+\ir ../migrations/20261115000001_sync_pet_gems.sql
+\ir ../migrations/20261115000001_sync_pet_gems.sql
+do $$ begin
+  if (select balance from public.point_wallets where user_id = '71d892d2-3fb4-44a1-8e00-000000000004') <> 300 then raise exception 'profile backfill'; end if;
+  if (select gems from public.profiles where id = '71d892d2-3fb4-44a1-8e00-000000000005') <> 5 then raise exception 'wallet must win'; end if;
+  if exists (select 1 from public.point_transactions) then raise exception 'backfill wrote ledger'; end if;
+end $$;
+delete from public.point_wallets where user_id = '71d892d2-3fb4-44a1-8e00-000000000006';
 insert into public.pet_costumes (id, name, price, asset_reference) values ('test_hat', 'Hat', 20, 'hat.png');
 insert into public.point_wallets (user_id, balance) values
   ('71d892d2-3fb4-44a1-8e00-000000000001', 30), ('71d892d2-3fb4-44a1-8e00-000000000002', 13), ('71d892d2-3fb4-44a1-8e00-000000000003', 100);
+select set_config('request.jwt.claim.sub', '71d892d2-3fb4-44a1-8e00-000000000006', true);
+set local role authenticated;
+do $$ begin
+  if (public.get_pet_gems()->>'balance')::integer <> 300 then raise exception 'profile-only balance'; end if;
+  if (public.purchase_pet_costume('test_hat', false)->>'balance')::integer <> 280 then raise exception 'profile-only purchase'; end if;
+  if (select gems from public.profiles where id = '71d892d2-3fb4-44a1-8e00-000000000006') <> 280 then raise exception 'purchase mirror'; end if;
+end $$;
+reset role;
 select set_config('request.jwt.claim.sub', '71d892d2-3fb4-44a1-8e00-000000000001', true);
 set local role authenticated;
 do $$

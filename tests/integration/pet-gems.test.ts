@@ -23,7 +23,7 @@ describe('pet gems', () => {
     expect((await app.inject({ method: 'GET', url: '/pet/gems' })).statusCode).toBe(401);
   });
   it('returns the current wallet and costumes through the user token', async () => {
-    const state = { balance: 12, equippedOutfit: 'hat', ownedOutfits: ['hat'] };
+    const state = { balance: 300, equippedOutfit: null, ownedOutfits: [] };
     const { app, rpc, forAccessToken } = await setup(state);
     const response = await app.inject({ method: 'GET', url: '/pet/gems', headers });
     expect(response.statusCode).toBe(200);
@@ -31,16 +31,21 @@ describe('pet gems', () => {
     expect(forAccessToken).toHaveBeenCalledWith('token');
     expect(rpc).toHaveBeenCalledWith('get_pet_gems', undefined);
   });
+  it('returns the wallet balance when the RPC reports an existing wallet', async () => {
+    const { app } = await setup({ balance: 5, equippedOutfit: null, ownedOutfits: [] });
+    const response = await app.inject({ method: 'GET', url: '/pet/gems', headers });
+    expect(response.json().balance).toBe(5);
+  });
   it('returns the catalogue', async () => {
     const { app } = await setup([{ id: 'hat', name: 'Hat', price: 10, assetReference: 'hat.png', owned: false }]);
     const response = await app.inject({ method: 'GET', url: '/pet/costumes', headers });
     expect(response.json()).toEqual({ costumes: [{ id: 'hat', name: 'Hat', price: 10, assetReference: 'hat.png', owned: false }] });
   });
   it('buys and equips with one RPC and rejects client prices', async () => {
-    const { app, rpc } = await setup({ status: 'ok', balance: 10, equippedOutfit: 'hat' });
+    const { app, rpc } = await setup({ status: 'ok', balance: 280, equippedOutfit: 'hat' });
     const response = await app.inject({ method: 'POST', url: '/pet/costumes/buy', headers, payload: { outfitId: 'hat', equip: true } });
     expect(response.statusCode).toBe(200);
-    expect(response.json()).toEqual({ balance: 10, equippedOutfit: 'hat' });
+    expect(response.json()).toEqual({ balance: 280, equippedOutfit: 'hat' });
     expect(rpc).toHaveBeenCalledWith('purchase_pet_costume', { p_outfit_id: 'hat', p_equip: true });
     expect((await app.inject({ method: 'POST', url: '/pet/costumes/buy', headers, payload: { outfitId: 'hat', price: 1 } })).statusCode).toBe(422);
   });
