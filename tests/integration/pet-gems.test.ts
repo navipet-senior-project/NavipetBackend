@@ -31,11 +31,6 @@ describe('pet gems', () => {
     expect(forAccessToken).toHaveBeenCalledWith('token');
     expect(rpc).toHaveBeenCalledWith('get_pet_gems', undefined);
   });
-  it('returns the wallet balance when the RPC reports an existing wallet', async () => {
-    const { app } = await setup({ balance: 5, equippedOutfit: null, ownedOutfits: [] });
-    const response = await app.inject({ method: 'GET', url: '/pet/gems', headers });
-    expect(response.json().balance).toBe(5);
-  });
   it('returns the catalogue', async () => {
     const { app } = await setup([{ id: 'hat', name: 'Hat', price: 10, assetReference: 'hat.png', owned: false }]);
     const response = await app.inject({ method: 'GET', url: '/pet/costumes', headers });

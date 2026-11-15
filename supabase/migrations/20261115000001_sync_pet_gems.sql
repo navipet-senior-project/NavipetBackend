@@ -28,9 +28,27 @@ drop trigger if exists mirror_point_wallet_balance on public.point_wallets;
 create trigger mirror_point_wallet_balance after insert or update of balance on public.point_wallets
 for each row execute function public.mirror_point_wallet_balance();
 
+create or replace function public.mirror_profile_gems() returns trigger
+language plpgsql security definer set search_path = '' as $$
+begin
+  if pg_trigger_depth() > 1 or new.gems is null then return new; end if;
+  if tg_op = 'INSERT' and new.gems = 0 then return new; end if;
+  insert into public.point_wallets (user_id, balance) values (new.id, new.gems)
+  on conflict (user_id) do update set balance = excluded.balance
+  where public.point_wallets.balance is distinct from excluded.balance;
+  return new;
+end;
+$$;
+drop trigger if exists mirror_profile_gems on public.profiles;
+create trigger mirror_profile_gems after insert or update of gems on public.profiles
+for each row execute function public.mirror_profile_gems();
+
+revoke update (gems) on table public.profiles from authenticated;
+
 insert into public.point_wallets (user_id, balance)
 select id, gems from public.profiles where gems > 0
-on conflict (user_id) do nothing;
+on conflict (user_id) do update set balance = excluded.balance
+where public.point_wallets.balance < excluded.balance;
 
 update public.profiles p set gems = w.balance
 from public.point_wallets w where p.id = w.user_id and p.gems is distinct from w.balance;
@@ -45,7 +63,7 @@ declare
 begin
   if v_user is null then raise exception 'Sign in to view gems'; end if;
   select * into v_wallet from public.point_wallets where user_id = v_user;
-  v_balance := coalesce(v_wallet.balance, (select gems from public.profiles where id = v_user), 0);
+  v_balance := coalesce(v_wallet.balance, 0);
   select coalesce(jsonb_agg(outfit_id order by outfit_id), '[]'::jsonb) into v_owned
     from public.outfit_purchases where user_id = v_user;
   return jsonb_build_object('balance', v_balance,
