@@ -17,6 +17,7 @@ import {
 } from './config/logging.js';
 import authRoutes from './modules/auth/auth.routes.js';
 import healthRoutes from './modules/health/health.routes.js';
+import petGemsRoutes from './modules/pet-gems/pet-gems.routes.js';
 import campusRoutes from './modules/campus/campus.routes.js';
 import indoorRoutes from './modules/indoor/indoor.routes.js';
 import recentSearchesRoutes from './modules/recent-searches/recent-searches.routes.js';
@@ -126,6 +127,7 @@ export async function buildApp(
   await app.register(profilesRoutes);
   await app.register(accessibilityRoutes);
   await app.register(healthRoutes);
+  await app.register(petGemsRoutes);
   await app.register(elbeeRoutes);
 
   return app;
