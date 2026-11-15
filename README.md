@@ -218,7 +218,7 @@ receives or localizes camera frames.
 ## Pet gems and costumes
 
 All endpoints require a standard `Authorization: Bearer <access-token>` session.
-Gems use the existing points wallet; the user is derived from the token.
+Gems use the existing points wallet, kept in sync with `profiles.gems` (the larger value wins on migration; clients cannot write `profiles.gems` directly). The user is derived from the token.
 
 - `GET /pet/gems` returns `balance`, `equippedOutfit` (or `null`), and `ownedOutfits`.
 - `GET /pet/costumes` returns `costumes`, each with `id`, `name`, `price`, `assetReference`, and `owned`. The catalogue is seeded with the four legacy outfits (`csulb_tee`, `grad_cap`, `shades`, `beach_hat`); the owner loads further costumes later.
