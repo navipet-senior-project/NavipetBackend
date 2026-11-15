@@ -221,6 +221,7 @@ All endpoints require a standard `Authorization: Bearer <access-token>` session.
 Gems use the existing points wallet; the user is derived from the token.
 
 - `GET /pet/gems` returns `balance`, `equippedOutfit` (or `null`), and `ownedOutfits`.
+- `GET /pet/gems/export` returns the current user’s `balance`, `equippedOutfit`, `ownedOutfits`, and `costumes` as two-space-indented JSON. Add `?download=1` to receive the same JSON with `Content-Disposition: attachment; filename="pet-gems.json"` for saving as a file. Both variants use `application/json`.
 - `GET /pet/costumes` returns `costumes`, each with `id`, `name`, `price`, `assetReference`, and `owned`. The catalogue is seeded with the four legacy outfits (`csulb_tee`, `grad_cap`, `shades`, `beach_hat`); the owner loads further costumes later.
 - `POST /pet/costumes/buy` accepts `{ "outfitId": "...", "equip": true }`. `equip` is optional and defaults to `false`. Price comes from the catalogue. A repeated purchase is successful without another charge; `equip: true` equips in the same transaction. The response contains `balance` and `equippedOutfit`.
 - `POST /pet/costumes/equip` accepts `{ "outfitId": "..." }` for an owned outfit and returns `balance` and `equippedOutfit`.
