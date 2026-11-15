@@ -8,7 +8,8 @@ insert into public.profiles (id, gems) values
   ('71d892d2-3fb4-44a1-8e00-000000000006', 300)
 on conflict (id) do update set gems = excluded.gems;
 set local session_replication_role = replica;
-insert into public.point_wallets (user_id, balance) values ('71d892d2-3fb4-44a1-8e00-000000000005', 5);
+insert into public.point_wallets (user_id, balance) values ('71d892d2-3fb4-44a1-8e00-000000000005', 5)
+on conflict (user_id) do update set balance = 5;
 update public.profiles set gems = 300 where id = '71d892d2-3fb4-44a1-8e00-000000000005';
 update public.profiles set gems = 300 where id in ('71d892d2-3fb4-44a1-8e00-000000000004', '71d892d2-3fb4-44a1-8e00-000000000006');
 delete from public.point_wallets where user_id in ('71d892d2-3fb4-44a1-8e00-000000000004', '71d892d2-3fb4-44a1-8e00-000000000006');
