@@ -221,8 +221,8 @@ All endpoints require a standard `Authorization: Bearer <access-token>` session.
 Gems use the existing points wallet; the user is derived from the token.
 
 - `GET /pet/gems` returns `balance`, `equippedOutfit` (or `null`), and `ownedOutfits`.
-- `GET /pet/costumes` returns `costumes`, each with `id`, `name`, `price`, `assetReference`, and `owned`. The catalogue is empty until seeded by the owner.
+- `GET /pet/costumes` returns `costumes`, each with `id`, `name`, `price`, `assetReference`, and `owned`. The catalogue is seeded with the four legacy outfits (`csulb_tee`, `grad_cap`, `shades`, `beach_hat`); the owner loads further costumes later.
 - `POST /pet/costumes/buy` accepts `{ "outfitId": "...", "equip": true }`. `equip` is optional and defaults to `false`. Price comes from the catalogue. A repeated purchase is successful without another charge; `equip: true` equips in the same transaction. The response contains `balance` and `equippedOutfit`.
 - `POST /pet/costumes/equip` accepts `{ "outfitId": "..." }` for an owned outfit and returns `balance` and `equippedOutfit`.
 
-A purchase with insufficient gems returns HTTP 409, error code `INSUFFICIENT_GEMS`, and `error.shortfall` with the number of additional gems needed. Unknown costumes and attempts to equip unowned outfits return 404. Apply the migration before using these endpoints; costume assets and catalogue seeding are separate follow-ups. The legacy `buy_outfit` RPC also uses the catalogue, so existing clients cannot purchase an outfit until it is seeded.
+A purchase with insufficient gems returns HTTP 409, error code `INSUFFICIENT_GEMS`, and `error.shortfall` with the number of additional gems needed. Unknown costumes and attempts to equip unowned outfits return 404. Apply the migration before using these endpoints; costume assets and catalogue seeding are separate follow-ups. The legacy `buy_outfit` RPC also uses the catalogue, which keeps the original four outfits and prices.

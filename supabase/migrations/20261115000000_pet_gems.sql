@@ -1,4 +1,4 @@
--- Costume catalogue starts empty; prices are controlled by the database owner.
+-- Catalogue holds only the legacy outfits; prices are controlled by the database owner.
 set lock_timeout = '5s';
 set statement_timeout = '60s';
 
@@ -89,6 +89,12 @@ $$;
 
 revoke all on function public.get_pet_gems(), public.get_pet_costumes(), public.purchase_pet_costume(text, boolean), public.equip_pet_costume(text) from public, anon;
 grant execute on function public.get_pet_gems(), public.get_pet_costumes(), public.purchase_pet_costume(text, boolean), public.equip_pet_costume(text) to authenticated;
+
+insert into public.pet_costumes (id, name, price, asset_reference) values
+  ('csulb_tee', 'CSULB Tee', 20, 'csulb_tee'),
+  ('grad_cap', 'Grad Cap', 30, 'grad_cap'),
+  ('shades', 'Shades', 15, 'shades'),
+  ('beach_hat', 'Beach Hat', 25, 'beach_hat');
 
 -- Existing clients must use the same catalogue prices as the new API.
 create or replace function public.buy_outfit(p_outfit_id text) returns integer
