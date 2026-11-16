@@ -93,6 +93,59 @@ const petGemsRoutes: FastifyPluginCallbackTypebox = (fastify, _options, done) =>
   }, async request => outcome(await rpc<PurchaseResult>(request.accessToken as string, 'equip_pet_costume', {
     p_outfit_id: request.body.outfitId,
   })));
+
+  fastify.post('/pet/rewards/daily-login', {
+    preHandler: fastify.authenticate,
+    schema: {
+      ...schema('Claim the daily login reward'),
+      response: { ...errors, 200: Type.Object({ balance: Type.Integer(), earned: Type.Integer() }) },
+    },
+  }, async request => {
+    const result = await rpc<{ status: string; balance: number; earned: number }>(
+      request.accessToken as string, 'claim_daily_login',
+    );
+    if (result.status !== 'ok') throw new AppError({
+      code: ErrorCode.UPSTREAM_ERROR, statusCode: 502, message: 'Pet gems storage unavailable',
+    });
+    return { balance: result.balance, earned: result.earned };
+  });
+
+  // Navigation credit stays off until arrival verification is decided: a client-supplied
+  // coordinate cannot prove arrival, so these routes validate and authenticate but never pay,
+  // store, or log coordinates.
+  const coordinates = { latitude: Type.Number({ minimum: -90, maximum: 90 }), longitude: Type.Number({ minimum: -180, maximum: 180 }) };
+  const navigationStart = Type.Object(
+    { destinationId: Type.String({ minLength: 1, maxLength: 200 }), ...coordinates },
+    { additionalProperties: false },
+  );
+  const navigationFinish = Type.Object(
+    { tripId: Type.String({ minLength: 1, maxLength: 200 }), ...coordinates },
+    { additionalProperties: false },
+  );
+  const navigationDisabled = {
+    ...errors,
+    501: ErrorResponseSchema('Navigation rewards are not available yet'),
+  };
+  const notAvailable = (requestId: string) => ({ error: {
+    code: ErrorCode.NAVIGATION_REWARD_UNAVAILABLE,
+    message: 'Navigation rewards are not available yet', requestId,
+  } });
+
+  fastify.post('/pet/rewards/navigation/start', {
+    preHandler: fastify.authenticate,
+    schema: { ...schema('Start a navigation trip (rewards not yet available)'), body: navigationStart, response: navigationDisabled },
+  }, async (request, reply) => {
+    void reply.status(501);
+    return notAvailable(request.id);
+  });
+
+  fastify.post('/pet/rewards/navigation/finish', {
+    preHandler: fastify.authenticate,
+    schema: { ...schema('Finish a navigation trip (rewards not yet available)'), body: navigationFinish, response: navigationDisabled },
+  }, async (request, reply) => {
+    void reply.status(501);
+    return notAvailable(request.id);
+  });
   done();
 };
 export default petGemsRoutes;
