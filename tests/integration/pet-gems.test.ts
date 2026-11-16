@@ -56,4 +56,44 @@ describe('pet gems', () => {
     expect(response.statusCode).toBe(200);
     expect(rpc).toHaveBeenCalledWith('equip_pet_costume', { p_outfit_id: 'hat' });
   });
+  it('requires authentication for the daily login reward', async () => {
+    const { app, rpc } = await setup(null);
+    expect((await app.inject({ method: 'POST', url: '/pet/rewards/daily-login' })).statusCode).toBe(401);
+    expect(rpc).not.toHaveBeenCalled();
+  });
+  it('claims the daily login reward for the token user only', async () => {
+    const { app, rpc, forAccessToken } = await setup({ status: 'ok', balance: 305, earned: 5 });
+    const response = await app.inject({ method: 'POST', url: '/pet/rewards/daily-login', headers });
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({ balance: 305, earned: 5 });
+    expect(forAccessToken).toHaveBeenCalledWith('token');
+    expect(rpc).toHaveBeenCalledWith('claim_daily_login', undefined);
+  });
+  it('reports a repeat claim as earning nothing', async () => {
+    const { app } = await setup({ status: 'ok', balance: 305, earned: 0 });
+    const response = await app.inject({ method: 'POST', url: '/pet/rewards/daily-login', headers });
+    expect(response.json()).toEqual({ balance: 305, earned: 0 });
+  });
+  it('maps storage failures to 502 without leaking details', async () => {
+    const { app, rpc } = await setup(null);
+    rpc.mockResolvedValue({ data: null, error: { message: 'secret detail' } });
+    const response = await app.inject({ method: 'POST', url: '/pet/rewards/daily-login', headers });
+    expect(response.statusCode).toBe(502);
+    expect(response.body).not.toContain('secret detail');
+  });
+  it.each([
+    ['/pet/rewards/navigation/start', { destinationId: 'bldg', latitude: 33.78, longitude: -118.11 }],
+    ['/pet/rewards/navigation/finish', { tripId: 'trip', latitude: 33.78, longitude: -118.11 }],
+  ])('%s never pays, stores or calls the database', async (url, payload) => {
+    const { app, rpc, forAccessToken } = await setup(null);
+    expect((await app.inject({ method: 'POST', url, payload })).statusCode).toBe(401);
+    const response = await app.inject({ method: 'POST', url, headers, payload });
+    expect(response.statusCode).toBe(501);
+    expect(response.json<{ error: { code: string } }>().error.code).toBe('NAVIGATION_REWARD_UNAVAILABLE');
+    expect(response.body).not.toContain('earned');
+    expect(rpc).not.toHaveBeenCalled();
+    expect(forAccessToken).not.toHaveBeenCalled();
+    const bad = await app.inject({ method: 'POST', url, headers, payload: { ...payload, latitude: 91 } });
+    expect(bad.statusCode).toBe(422);
+  });
 });
