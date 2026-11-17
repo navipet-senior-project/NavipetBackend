@@ -274,7 +274,7 @@ export function compareVecPoints(
     skippedNonDoorCount: prepared.skippedNonDoorCount,
     danglingRefs: [],
   };
-  const desiredDestinationsByKey = new Map<string, string>();
+  const desiredKeys = new Set<string>();
   const desiredRoomIds = new Set<string>();
 
   for (const door of prepared.doors) {
@@ -313,7 +313,7 @@ export function compareVecPoints(
       exported_at: prepared.exported_at,
       active: true,
     };
-    desiredDestinationsByKey.set(door.point_key, room.id);
+    desiredKeys.add(door.point_key);
     desiredRoomIds.add(room.id);
 
     const current = currentVersion.get(door.point_key);
@@ -336,10 +336,7 @@ export function compareVecPoints(
       );
     }
     if (!point.active) continue;
-    if (
-      point.map_version !== prepared.map_version ||
-      desiredDestinationsByKey.get(point.point_key) !== point.destination_id
-    ) {
+    if (point.map_version !== prepared.map_version || !desiredKeys.has(point.point_key)) {
       report.deactivate.push({
         id: point.id,
         point_key: point.point_key,
@@ -349,7 +346,7 @@ export function compareVecPoints(
   }
 
   report.danglingRefs = snapshot.multisetRefs.filter(
-    (ref) => roomsById.has(ref.destination_id) && !desiredDestinationsByKey.has(ref.external_id),
+    (ref) => roomsById.has(ref.destination_id) && !desiredKeys.has(ref.external_id),
   );
 
   return report;

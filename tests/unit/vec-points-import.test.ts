@@ -357,7 +357,7 @@ describe('compareVecPoints', () => {
     expect(report.deactivate.map((row) => row.point_key)).toEqual(['VEC119']);
   });
 
-  test('deactivates both old links before reassigning their keys within a version', () => {
+  test('does not deactivate retained keys when same-version room assignments are swapped', () => {
     const points = compareVecPoints(twoDoors(), snapshot()).insert.map((row) => stored(row));
     const prepared = prepareVecPoints(
       vecExport({
@@ -365,11 +365,7 @@ describe('compareVecPoints', () => {
       }),
     );
     const report = compareVecPoints(prepared, snapshot({ points }));
-    expect(report.deactivate.map((row) => row.id)).toEqual(points.map((row) => row.id));
-    expect(report.update.map((row) => [row.point_key, row.destination_id, row.active])).toEqual([
-      ['VEC201', 'room-119', true],
-      ['VEC119', 'room-201', true],
-    ]);
+    expect(report.deactivate).toEqual([]);
   });
 
   test('reactivates a complete older version and deactivates the newer one', () => {
