@@ -10,7 +10,7 @@ begin
           where map_code = 'MSET_XTBY7AM7ZK77' and floor = '3' and active and point_type = 'door') = 9,
     'expected 9 active floor 3 door points';
   assert (
-    select count(*) = 17 and count(b.id) = 17
+    select count(*) = 17 and count(b.id) = 17 and count(p.heading_deg) = 17
     from public.vec_destination_points p
     left join public.campus_destinations d
       on d.id = p.destination_id and d.type = 'room' and d.building_code = 'VEC'
@@ -21,7 +21,7 @@ begin
       and b.active and b.searchable
     where p.map_code = 'MSET_XTBY7AM7ZK77' and p.floor in ('1', '2')
       and p.active and p.point_type = 'door'
-  ), 'floors 1-2 must still have 17 active doors linked to matching searchable VEC rooms';
+  ), 'floors 1-2 must still have 17 active doors with headings and matching searchable VEC rooms';
   assert (select count(*) from public.campus_destinations
           where building_code = 'VEC' and type = 'room' and floor_number in ('1', '2')) = 17,
     'floors 1-2 must still have 17 rooms';
