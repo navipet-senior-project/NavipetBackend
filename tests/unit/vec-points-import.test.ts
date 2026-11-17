@@ -294,6 +294,10 @@ describe('compareVecPoints', () => {
   );
   const lowerFloorDoors = [door(), door({ key: 'VEC201', roomNumber: '201', floor: '2' })];
   const threeFloorMaps = [{ floors: ['1', '2', '3'] }];
+  const allDoors = [...lowerFloorDoors, ...thirdFloorDoors];
+  const completeExport = prepareVecPoints(
+    vecExport({ points: allDoors }, { maps: threeFloorMaps }),
+  );
 
   test.each([
     { description: 'lists only floors 1–2', prepared: twoDoors(), active: true, missing: '301' },
@@ -333,10 +337,7 @@ describe('compareVecPoints', () => {
     },
   ])('rejects an export that $description', ({ prepared, active, missing }) => {
     const current = snapshot({ rooms: [...rooms, ...thirdFloorRooms] });
-    const complete = prepareVecPoints(
-      vecExport({ points: [...lowerFloorDoors, ...thirdFloorDoors] }, { maps: threeFloorMaps }),
-    );
-    const points = compareVecPoints(complete, current).insert.map((row) =>
+    const points = compareVecPoints(completeExport, current).insert.map((row) =>
       stored(row, { active }),
     );
     expect(() => compareVecPoints(prepared, { ...current, points })).toThrow(
@@ -356,13 +357,35 @@ describe('compareVecPoints', () => {
     expect(report.deactivate.map((row) => row.point_key)).toEqual(['VEC119']);
   });
 
-  test('rejects an export older than the active version even with floor coverage', () => {
-    const points = compareVecPoints(twoDoors({ version: 2 }), snapshot()).insert.map((row) =>
+  test('deactivates both old links before reassigning their keys within a version', () => {
+    const points = compareVecPoints(twoDoors(), snapshot()).insert.map((row) => stored(row));
+    const prepared = prepareVecPoints(
+      vecExport({
+        points: [door({ key: 'VEC201' }), door({ key: 'VEC119', roomNumber: '201', floor: '2' })],
+      }),
+    );
+    const report = compareVecPoints(prepared, snapshot({ points }));
+    expect(report.deactivate.map((row) => row.id)).toEqual(points.map((row) => row.id));
+    expect(report.update.map((row) => [row.point_key, row.destination_id, row.active])).toEqual([
+      ['VEC201', 'room-119', true],
+      ['VEC119', 'room-201', true],
+    ]);
+  });
+
+  test('reactivates a complete older version and deactivates the newer one', () => {
+    const v1 = compareVecPoints(twoDoors(), snapshot()).insert.map((row) =>
+      stored(row, { active: false }),
+    );
+    const v2 = compareVecPoints(twoDoors({ version: 2 }), snapshot()).insert.map((row) =>
       stored(row),
     );
-    expect(() => compareVecPoints(twoDoors(), snapshot({ points }))).toThrow(
-      /map version 2 is already active/,
-    );
+    const report = compareVecPoints(twoDoors(), snapshot({ points: [...v1, ...v2] }));
+    expect(report.insert).toEqual([]);
+    expect(report.update.map((row) => [row.point_key, row.map_version, row.active])).toEqual([
+      ['VEC119', 1, true],
+      ['VEC201', 1, true],
+    ]);
+    expect(report.deactivate.map((row) => row.id)).toEqual(v2.map((row) => row.id));
   });
 
   test('a version bump inserts the new version and deactivates the old one', () => {
@@ -376,6 +399,20 @@ describe('compareVecPoints', () => {
       ['VEC119', 1],
       ['VEC201', 1],
     ]);
+  });
+
+  test('rejects multiple matched keys for a room before planning a version bump', () => {
+    const current = snapshot({ rooms: [...rooms, ...thirdFloorRooms] });
+    const points = compareVecPoints(completeExport, current).insert.map((row) => stored(row));
+    const v2 = prepareVecPoints(
+      vecExport(
+        { points: [...allDoors, door({ key: 'VEC301A', roomNumber: '301', floor: '3' })] },
+        { version: 2, maps: threeFloorMaps },
+      ),
+    );
+    expect(() => compareVecPoints(v2, { ...current, points })).toThrow(
+      'multiple doors for active VEC room 301',
+    );
   });
 
   test('plans a complete upgrade after the previous version was already deactivated', () => {
@@ -410,6 +447,26 @@ describe('compareVecPoints', () => {
       { point_key: 'VEC201', room_number: '201', exportFloor: '2', roomFloor: '3' },
     ]);
     expect(report.insert.map((row) => row.point_key)).toEqual(['VEC119']);
+  });
+
+  test('includes floor mismatch details when a stored door has no replacement', () => {
+    const current = snapshot({ rooms: [...rooms, ...thirdFloorRooms] });
+    const points = compareVecPoints(completeExport, current).insert.map((row) => stored(row));
+    const misplaced = prepareVecPoints(
+      vecExport(
+        {
+          points: [
+            ...lowerFloorDoors,
+            door({ key: 'VEC301', roomNumber: '301', floor: '4' }),
+            only(thirdFloorDoors[1]),
+          ],
+        },
+        { maps: [{ floors: ['1', '2', '3', '4'] }] },
+      ),
+    );
+    expect(() => compareVecPoints(misplaced, { ...current, points })).toThrow(
+      'VEC301: expected floor 3, got 4',
+    );
   });
 
   test('warns about a room provider ref whose key has no door', () => {

@@ -274,7 +274,7 @@ export function compareVecPoints(
     skippedNonDoorCount: prepared.skippedNonDoorCount,
     danglingRefs: [],
   };
-  const desiredKeys = new Set<string>();
+  const desiredDestinationsByKey = new Map<string, string>();
   const desiredRoomIds = new Set<string>();
 
   for (const door of prepared.doors) {
@@ -291,6 +291,9 @@ export function compareVecPoints(
         roomFloor: room.floor_number,
       });
       continue;
+    }
+    if (desiredRoomIds.has(room.id)) {
+      throw new Error(`Export rejected: multiple doors for active VEC room ${room.room_number}`);
     }
 
     const row: VecPointRow = {
@@ -310,7 +313,7 @@ export function compareVecPoints(
       exported_at: prepared.exported_at,
       active: true,
     };
-    desiredKeys.add(door.point_key);
+    desiredDestinationsByKey.set(door.point_key, room.id);
     desiredRoomIds.add(room.id);
 
     const current = currentVersion.get(door.point_key);
@@ -323,13 +326,20 @@ export function compareVecPoints(
     if (point.map_code !== prepared.map_code) continue;
     const room = roomsById.get(point.destination_id);
     if (room !== undefined && !desiredRoomIds.has(room.id)) {
-      throw new Error(`Export rejected: no matched door for active VEC room ${room.room_number}`);
+      const floorMismatches = report.floorMismatches.map(
+        ({ point_key, exportFloor, roomFloor }) =>
+          `${point_key}: expected floor ${roomFloor ?? '(unset)'}, got ${exportFloor}`,
+      );
+      throw new Error(
+        [`Export rejected: no matched door for active VEC room ${room.room_number}`, ...floorMismatches]
+          .join('\n'),
+      );
     }
     if (!point.active) continue;
-    if (point.map_version > prepared.map_version) {
-      throw new Error(`Export rejected: map version ${String(point.map_version)} is already active`);
-    }
-    if (point.map_version < prepared.map_version || !desiredKeys.has(point.point_key)) {
+    if (
+      point.map_version !== prepared.map_version ||
+      desiredDestinationsByKey.get(point.point_key) !== point.destination_id
+    ) {
       report.deactivate.push({
         id: point.id,
         point_key: point.point_key,
@@ -339,7 +349,7 @@ export function compareVecPoints(
   }
 
   report.danglingRefs = snapshot.multisetRefs.filter(
-    (ref) => roomsById.has(ref.destination_id) && !desiredKeys.has(ref.external_id),
+    (ref) => roomsById.has(ref.destination_id) && !desiredDestinationsByKey.has(ref.external_id),
   );
 
   return report;
