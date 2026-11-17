@@ -133,19 +133,21 @@ from request data as proof of identity.
 the MultiSet MapSet frame (`MSET_XTBY7AM7ZK77`, origin = `Floor 1 2` map root,
 left-handed, +Y up, metres). Only doors are stored.
 
-The source is the Unity export (contract v2, see issue #43), committed as
-`data/vec-points.json`.
+Supply the path to a complete Unity export in the MultiSet MapSet frame
+(contract v2, see issue #43). Include the floor-three doors. The legacy export
+covering only floors 1–2 is stale for the expanded MapSet.
 
 ```bash
-npm run vec-points:dry-run -- --file=data/vec-points.json
-npm run vec-points:apply -- --file=data/vec-points.json
+npm run vec-points:dry-run -- --file="/path/to/complete-vec-mapset-export.json"
+npm run vec-points:apply -- --file="/path/to/complete-vec-mapset-export.json"
 ```
 
 The dry-run prints planned inserts, updates, deactivations, unmatched doors
-(no VEC room row) and floor mismatches. Both commands reject an export if an
-active floor in its MapSet has no matched door or a newer map version is active.
-Apply also refuses floor mismatches. Deactivation sets `active = false` for
-keys missing from the file and rows of older map versions.
+(no VEC room row) and floor mismatches. Both commands require a matched door for
+every active VEC room with a stored door in the MapSet, including rooms whose
+stored doors are inactive. Both reject an export when a newer map version is
+active. Apply also refuses floor mismatches. It sets `active = false` on
+superseded doors and doors omitted for rooms that are no longer active.
 
 Applying is the go-live step: the API takes a VEC room's
 `navigation.indoorDestinationId` from its active door point, so the room is

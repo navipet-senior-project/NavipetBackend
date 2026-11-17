@@ -251,6 +251,7 @@ export function compareVecPoints(
   snapshot: VecSnapshot,
 ): VecPointsReport {
   const roomsByNumber = new Map(snapshot.rooms.map((room) => [room.room_number, room]));
+  const roomsById = new Map(snapshot.rooms.map((room) => [room.id, room]));
   const currentVersion = new Map(
     snapshot.points
       .filter(
@@ -274,7 +275,7 @@ export function compareVecPoints(
     danglingRefs: [],
   };
   const desiredKeys = new Set<string>();
-  const coveredFloors = new Set<string>();
+  const desiredRoomIds = new Set<string>();
 
   for (const door of prepared.doors) {
     const room = roomsByNumber.get(door.room_number);
@@ -310,7 +311,7 @@ export function compareVecPoints(
       active: true,
     };
     desiredKeys.add(door.point_key);
-    coveredFloors.add(door.floor);
+    desiredRoomIds.add(room.id);
 
     const current = currentVersion.get(door.point_key);
     if (current === undefined) report.insert.push(row);
@@ -319,10 +320,12 @@ export function compareVecPoints(
   }
 
   for (const point of snapshot.points) {
-    if (!point.active || point.map_code !== prepared.map_code) continue;
-    if (!coveredFloors.has(point.floor)) {
-      throw new Error(`Export rejected: no matched doors for active floor ${point.floor}`);
+    if (point.map_code !== prepared.map_code) continue;
+    const room = roomsById.get(point.destination_id);
+    if (room !== undefined && !desiredRoomIds.has(room.id)) {
+      throw new Error(`Export rejected: no matched door for active VEC room ${room.room_number}`);
     }
+    if (!point.active) continue;
     if (point.map_version > prepared.map_version) {
       throw new Error(`Export rejected: map version ${String(point.map_version)} is already active`);
     }
@@ -335,9 +338,8 @@ export function compareVecPoints(
     }
   }
 
-  const roomIds = new Set(snapshot.rooms.map((room) => room.id));
   report.danglingRefs = snapshot.multisetRefs.filter(
-    (ref) => roomIds.has(ref.destination_id) && !desiredKeys.has(ref.external_id),
+    (ref) => roomsById.has(ref.destination_id) && !desiredKeys.has(ref.external_id),
   );
 
   return report;

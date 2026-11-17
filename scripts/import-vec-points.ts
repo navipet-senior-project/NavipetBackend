@@ -24,7 +24,6 @@ import {
   type VecSnapshot,
 } from './lib/vec-points-import.js';
 
-const DEFAULT_FILE = 'data/vec-points.json';
 const MAX_ROWS = 1_000;
 const POINT_COLUMNS =
   'id,point_key,point_type,room_number,floor,x,y,z,heading_deg,map_provider,map_code,map_version,frame,destination_id,exported_at,active';
@@ -113,8 +112,11 @@ async function main(): Promise<void> {
   const fileArgument = process.argv
     .slice(2)
     .find((argument) => argument.startsWith('--file='));
-  const filePath = resolve(fileArgument?.slice('--file='.length) ?? DEFAULT_FILE);
-  const prepared = prepareVecPoints(JSON.parse(await readFile(filePath, 'utf8')) as unknown);
+  const filePath = fileArgument?.slice('--file='.length);
+  if (!filePath) throw new Error('Pass --file=<path> to a complete VEC Unity export');
+  const prepared = prepareVecPoints(
+    JSON.parse(await readFile(resolve(filePath), 'utf8')) as unknown,
+  );
 
   const client = createClient(
     requireEnvironment('SUPABASE_URL'),
