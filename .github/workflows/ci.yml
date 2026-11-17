@@ -77,7 +77,11 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
       - run: npm ci
+      # Gate on production dependencies only. Dev-only picomatch<=4.0.7 (GHSA-fc5q-39xc-vjpf) has no upstream patch yet.
+      - run: npm audit --omit=dev --audit-level=high
+      # Full audit stays visible but nonblocking; drop continue-on-error once picomatch is patched.
       - run: npm audit --audit-level=high
+        continue-on-error: true
 
   deploy:
     name: Deploy to Render
