@@ -129,9 +129,11 @@ from request data as proof of identity.
 
 ## Indoor door import (VEC)
 
-`public.vec_destination_points` stores the door position of every VEC room in
-the MultiSet MapSet frame (`MSET_XTBY7AM7ZK77`, origin = `Floor 1 2` map root,
-left-handed, +Y up, metres). Only doors are stored.
+`public.vec_destination_points` stores VEC room door positions in the MultiSet
+MapSet frame (`MSET_XTBY7AM7ZK77`, origin = `Floor 1 2` map root, left-handed,
++Y up, metres). The [floor-three migration](supabase/migrations/20261117205322_add_vec_floor3_points.sql)
+adds the floor-three rooms and doors alongside the existing lower-floor data.
+After applying the migration, use the [read-only SQL checks](supabase/tests/vec_floor3_checks.sql).
 
 Supply the path to a complete Unity export in the MultiSet MapSet frame using
 [contract v2](scripts/lib/vec-points-import.ts). Include the floor-three doors.
@@ -142,20 +144,20 @@ npm run vec-points:dry-run -- --file="/path/to/complete-vec-mapset-export.json"
 npm run vec-points:apply -- --file="/path/to/complete-vec-mapset-export.json"
 ```
 
-Without `--file`, both commands read `data/vec-points.json`.
+Without `--file`, both commands look for a local export at `data/vec-points.json`.
 
 The dry-run prints planned inserts, updates, deactivations, unmatched doors
-(no VEC room row) and floor mismatches. Both commands require exactly one
-matched door for every active VEC room with a stored door in the MapSet,
-including rooms whose stored doors are inactive. If missing coverage blocks
-the plan, the error includes any floor mismatches. Apply also refuses floor
-mismatches shown in the dry-run. It sets `active = false` on superseded doors
-and doors omitted for rooms that are no longer active.
+(no active VEC room row) and floor mismatches. Both commands require a matched
+door for every active VEC room with a stored door in the MapSet, including rooms
+whose stored doors are inactive. They reject multiple matched doors for any
+room. If missing coverage blocks the plan, the error includes any floor
+mismatches. Apply also rejects floor mismatches shown in the dry-run. It sets
+`active = false` on doors in the same MapSet whose version differs from the
+export or whose key is omitted from the matched doors.
 
-Applying is the go-live step: the API takes a VEC room's
-`navigation.indoorDestinationId` from its active door point, so the room is
-indoor-navigable in the app as soon as its door is applied. Do not set
-`multiset_destination_id` for VEC rooms in `data/csulb-campus-places.csv`.
+The API takes a VEC room's `navigation.indoorDestinationId` from its active
+door point. Place detail includes the indoor pose when the door has a heading.
+Do not set `multiset_destination_id` for VEC rooms in `data/csulb-campus-places.csv`.
 
 ## Supabase security
 
