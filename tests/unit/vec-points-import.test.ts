@@ -279,6 +279,54 @@ describe('compareVecPoints', () => {
     ]);
   });
 
+  test.each([
+    { description: 'lists only floors 1–2', prepared: twoDoors() },
+    {
+      description: 'lists floor 3 without doors',
+      prepared: twoDoors({ maps: [{ floors: ['1', '2', '3'] }] }),
+    },
+    {
+      description: 'has only an unmatched door on floor 3 in the new version',
+      prepared: prepareVecPoints(
+        vecExport(
+          {
+            points: [
+              door(),
+              door({ key: 'VEC201', roomNumber: '201', floor: '2' }),
+              door({ key: 'VEC399', roomNumber: '399', floor: '3' }),
+            ],
+          },
+          { version: 2, maps: [{ floors: ['1', '2', '3'] }] },
+        ),
+      ),
+    },
+  ])('rejects an export that $description when floor 3 has active doors', ({ prepared }) => {
+    const existing = compareVecPoints(twoDoors(), snapshot()).insert.map((row) => stored(row));
+    const floorThree = stored(only(existing[0]), {
+      id: 'id-VEC301-1',
+      point_key: 'VEC301',
+      room_number: '301',
+      floor: '3',
+      destination_id: 'room-301',
+    });
+    const current = snapshot({
+      rooms: [...rooms, { id: 'room-301', room_number: '301', floor_number: '3' }],
+      points: [...existing, floorThree],
+    });
+    expect(() => compareVecPoints(prepared, current)).toThrow(
+      /no matched doors for active floor 3/,
+    );
+  });
+
+  test('rejects an export older than the active version even with floor coverage', () => {
+    const points = compareVecPoints(twoDoors({ version: 2 }), snapshot()).insert.map((row) =>
+      stored(row),
+    );
+    expect(() => compareVecPoints(twoDoors(), snapshot({ points }))).toThrow(
+      /map version 2 is already active/,
+    );
+  });
+
   test('a version bump inserts the new version and deactivates the old one', () => {
     const v1 = compareVecPoints(twoDoors(), snapshot()).insert.map((row) => stored(row));
     const report = compareVecPoints(twoDoors({ version: 2 }), snapshot({ points: v1 }));

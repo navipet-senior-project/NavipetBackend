@@ -9,12 +9,6 @@
 -- viewer cursor. y = 6.04: floor 3 slab measured at Y 5.990-6.041 in the
 -- MapSet viewer (map "3 4", MSET_XTBY7AM7ZK77), plus the ~0.03 m offset
 -- floor 2 rows use above their slab.
---
--- Rollback:
---   delete from public.vec_destination_points
---     where map_code = 'MSET_XTBY7AM7ZK77' and floor = '3';
---   delete from public.campus_destinations
---     where source = 'navipet_vec_rooms' and building_code = 'VEC' and floor_number = '3';
 
 insert into public.campus_destinations (
   import_key, type, name, code, parent_destination_id, building_code,

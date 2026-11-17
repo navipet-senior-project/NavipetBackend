@@ -142,9 +142,10 @@ npm run vec-points:apply -- --file=data/vec-points.json
 ```
 
 The dry-run prints planned inserts, updates, deactivations, unmatched doors
-(no VEC room row) and floor mismatches. Apply refuses to run while any floor
-mismatch exists. Rows are never deleted: keys missing from the file and rows
-of older map versions are set `active = false`.
+(no VEC room row) and floor mismatches. Both commands reject an export if an
+active floor in its MapSet has no matched door or a newer map version is active.
+Apply also refuses floor mismatches. Deactivation sets `active = false` for
+keys missing from the file and rows of older map versions.
 
 Applying is the go-live step: the API takes a VEC room's
 `navigation.indoorDestinationId` from its active door point, so the room is

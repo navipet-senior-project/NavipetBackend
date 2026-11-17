@@ -15,11 +15,34 @@ begin
   assert (select count(*) from public.campus_destinations
           where building_code = 'VEC' and type = 'room' and floor_number in ('1', '2')) = 17,
     'floors 1-2 must still have 17 rooms';
-  assert (select count(*) from public.vec_destination_points p
-          join public.campus_destinations d on d.id = p.destination_id
-          where p.floor = '3' and d.room_number = p.room_number and d.floor_number = '3') = 9,
-    'every floor 3 point must link to its floor 3 room';
-  assert (select min(y) = max(y) and min(y) = 6.04 from public.vec_destination_points where floor = '3'),
-    'floor 3 y must be 6.04';
+  assert (
+    select count(*)
+    from (values
+      ('VEC301', '301', -23.5303, 27.3007,   5.36),
+      ('VEC302', '302', -19.7469, 26.946,    5.36),
+      ('VEC304', '304', -15.848,  26.5804,   5.36),
+      ('VEC321', '321',   8.8571, 24.5574,   5.36),
+      ('VEC322', '322',  23.5478, 23.2996,   5.36),
+      ('VEC325', '325', -15.2283, 23.6016, 185.36),
+      ('VEC326', '326',  -3.9229, 22.5416, 185.36),
+      ('VEC330', '330',  10.0452, 21.5464, 185.36),
+      ('VEC331', '331',  19.0855, 20.6988, 185.36)
+    ) as expected(point_key, room_number, x, z, heading_deg)
+    join public.vec_destination_points p
+      on p.point_key = expected.point_key and p.room_number = expected.room_number
+      and p.x = expected.x and p.y = 6.04 and p.z = expected.z
+      and p.heading_deg = expected.heading_deg
+    join public.campus_destinations d
+      on d.id = p.destination_id
+      and d.import_key = 'source:navipet_vec_rooms:vec-' || expected.room_number
+      and d.code = 'VEC-' || expected.room_number and d.room_number = expected.room_number
+      and d.type = 'room' and d.source = 'navipet_vec_rooms'
+      and d.building_code = 'VEC' and d.floor_number = '3' and d.active and d.searchable
+    join public.campus_destinations b
+      on b.id = d.parent_destination_id and b.type = 'building' and b.code = 'VEC'
+      and b.active and b.searchable
+    where p.map_code = 'MSET_XTBY7AM7ZK77' and p.map_version = 1
+      and p.floor = '3' and p.active and p.point_type = 'door'
+  ) = 9, 'active floor 3 doors and their room links must match the export';
   raise notice 'vec floor 3 checks passed';
 end $$;

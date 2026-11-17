@@ -274,6 +274,7 @@ export function compareVecPoints(
     danglingRefs: [],
   };
   const desiredKeys = new Set<string>();
+  const coveredFloors = new Set<string>();
 
   for (const door of prepared.doors) {
     const room = roomsByNumber.get(door.room_number);
@@ -309,6 +310,7 @@ export function compareVecPoints(
       active: true,
     };
     desiredKeys.add(door.point_key);
+    coveredFloors.add(door.floor);
 
     const current = currentVersion.get(door.point_key);
     if (current === undefined) report.insert.push(row);
@@ -318,8 +320,13 @@ export function compareVecPoints(
 
   for (const point of snapshot.points) {
     if (!point.active || point.map_code !== prepared.map_code) continue;
-    const otherVersion = point.map_version !== prepared.map_version;
-    if (otherVersion || !desiredKeys.has(point.point_key)) {
+    if (!coveredFloors.has(point.floor)) {
+      throw new Error(`Export rejected: no matched doors for active floor ${point.floor}`);
+    }
+    if (point.map_version > prepared.map_version) {
+      throw new Error(`Export rejected: map version ${String(point.map_version)} is already active`);
+    }
+    if (point.map_version < prepared.map_version || !desiredKeys.has(point.point_key)) {
       report.deactivate.push({
         id: point.id,
         point_key: point.point_key,
