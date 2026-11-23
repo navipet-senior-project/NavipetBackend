@@ -19,6 +19,7 @@ import authRoutes from './modules/auth/auth.routes.js';
 import healthRoutes from './modules/health/health.routes.js';
 import petGemsRoutes from './modules/pet-gems/pet-gems.routes.js';
 import campusRoutes from './modules/campus/campus.routes.js';
+import wifiRoutes from './modules/campus/wifi.routes.js';
 import indoorRoutes from './modules/indoor/indoor.routes.js';
 import recentSearchesRoutes from './modules/recent-searches/recent-searches.routes.js';
 import classesRoutes from './modules/classes/classes.routes.js';
@@ -121,6 +122,7 @@ export async function buildApp(
   await app.register(authPlugin, authOptions);
   await app.register(authRoutes);
   await app.register(campusRoutes);
+  await app.register(wifiRoutes);
   await app.register(indoorRoutes);
   await app.register(recentSearchesRoutes);
   await app.register(classesRoutes);
