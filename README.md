@@ -5,7 +5,8 @@
 NaviPet Backend is the TypeScript API for the NaviPet indoor/outdoor campus navigation
 application. It provides the trusted server boundary between the Flutter client
 and Supabase for authenticated user features such as profiles, class schedules,
-task progress, and future navigation data.
+and task progress. It also serves campus place data and supports
+[indoor navigation](#indoor-navigation-architecture).
 
 The service does not manage passwords or create a separate identity system.
 Supabase Auth owns user identity, while this backend validates access tokens,
@@ -153,10 +154,10 @@ indoor fields require that server-side key.
    `navigation.indoorDestinationId` comes from its active door point when one
    is available.
 2. Flutter opens `GET /places/:placeId`. When the room has an active door with a
-   heading, `place.indoor` contains `mapCode`, `frame` (`multiset-mapset`),
-   `doorKey`, `floor`, `position` (`x`, `y`, `z`, metres), and `headingDeg`
-   (0 to <360). If the active door lacks a heading, the backend omits
-   `place.indoor` and logs the omission.
+   heading, `place.indoor` contains the door pose in the MapSet frame. See
+   [Swagger UI](#local-api-testing-with-swagger-ui) for the response schema. If
+   the active door lacks a heading, the backend omits `place.indoor` and logs
+   the omission.
 3. Flutter continues with indoor navigation only if place detail returns
    `place.indoor`. It then calls `POST /indoor/ar-token` (see
    [Indoor AR token exchange](#indoor-ar-token-exchange)) and starts the Unity
@@ -175,9 +176,9 @@ device and reports `STEP_FREE_UNVERIFIED` when a step-free route is requested.
 - MultiSet localizes the phone camera against the MapSet. This happens inside
   Unity through the MultiSet SDK; the backend never sees camera frames or
   localization results.
-- The backend exchanges server-side MultiSet credentials for a short-lived
-  token that inherits their scope. Configure credentials with only the Query
-  scope. The credentials stay on the server.
+- The backend issues the short-lived token through the
+  [Indoor AR token exchange](#indoor-ar-token-exchange), which covers credential
+  scope and setup.
 - The door poses stored here must stay in the MapSet frame that MultiSet
   returns, or Unity's guidance will be offset. The backend does not verify this;
   the import scripts check shape, not geometry.
@@ -292,10 +293,8 @@ MultiSet documents a 30-minute lifetime and Query permission for localization:
 [authentication](https://docs.multiset.ai/fundamentals/rest-api-docs/authentication).
 Its [CORS guide](https://docs.multiset.ai/fundamentals/credentials/configuring-allowed-domains-cors)
 describes browser origins, without specifying rejection of native requests that
-have no Origin header. Verify this on a phone during Unity integration. Flutter
-passes the backend-issued token to Unity at startup. Token renewal during an
-active Unity session remains a separate integration task. This backend never
-receives or localizes camera frames.
+have no Origin header. Verify this on a phone during Unity integration. Token
+renewal during an active Unity session remains a separate integration task.
 
 ## Pet gems and costumes
 
