@@ -133,8 +133,7 @@ Indoor navigation spans three codebases. This repository is only the data and
 credential backend; the Flutter app hands off to a Unity AR runtime that
 localizes and guides with MultiSet. This section describes the merged code on
 each side's default branch at the time of writing (backend `main`; Flutter and
-Unity `origin/main`), not the Flutter application overview or the mapping
-services described elsewhere in this README.
+Unity `origin/main`).
 
 ### Responsibilities
 
@@ -184,8 +183,8 @@ instead of producing a path.
 ### Wi-Fi fingerprints (experimental)
 
 `campus_destinations.wifi_fingerprints` (room rows only, JSON array) holds
-survey scans loaded with `scripts/import-wifi-survey.mjs` (dry run by default;
-`--apply` writes). `GET /buildings/:buildingCode/wifi-fingerprints` returns
+survey scans loaded by the [Wi-Fi survey importer](scripts/import-wifi-survey.mjs).
+`GET /buildings/:buildingCode/wifi-fingerprints` returns
 `{ schemaVersion, building, coordinateFrame, fingerprints }` for a building's
 active rooms. Notes:
 
@@ -235,8 +234,7 @@ mismatches. Apply also rejects floor mismatches shown in the dry-run. It sets
 `active = false` on doors in the same MapSet whose version differs from the
 export or whose key is omitted from the matched doors.
 
-The API takes a VEC room's `navigation.indoorDestinationId` from its active
-door point. Place detail includes the indoor pose when the door has a heading.
+See [Data flow](#data-flow) for how the API uses active door points.
 Do not set `multiset_destination_id` for VEC rooms in `data/csulb-campus-places.csv`.
 
 ## Supabase security
