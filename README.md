@@ -192,7 +192,6 @@ active rooms. Notes:
   service-role client. It sends `Cache-Control: private, max-age=300`. Treat the
   stored scans, which include access-point BSSIDs, as publicly readable.
 - Without the service-role key it returns 503.
-- The survey importer accepts floors 1 and 2 only.
 - Flutter's Wi-Fi positioning screen records and matches fingerprints on the
   device (Android only). I found no call to this endpoint in Flutter `main`,
   so whether any client consumes it is unverified.
@@ -210,13 +209,18 @@ active rooms. Notes:
 ## Indoor door import (VEC)
 
 `public.vec_destination_points` stores VEC room door positions in the MultiSet
-MapSet frame (origin = `Floor 1 2` map root, left-handed, +Y up, metres). The [floor-three migration](supabase/migrations/20261117205322_add_vec_floor3_points.sql)
+MapSet frame (`MSET_XTBY7AM7ZK77`, origin = `Floor 1 2` map root, left-handed,
++Y up, metres). The [floor-three migration](supabase/migrations/20261117205322_add_vec_floor3_points.sql)
 adds the floor-three rooms and doors alongside the existing lower-floor data.
 After applying the migration, use the [read-only SQL checks](supabase/tests/vec_floor3_checks.sql).
 
 Supply the path to a complete Unity export in the MultiSet MapSet frame using
 [contract v2](scripts/lib/vec-points-import.ts). Include the floor-three doors.
 The legacy export covering only floors 1–2 is stale for the expanded MapSet.
+
+Check that the export's `map.code` matches the MapSet above before running either
+command. Applying an export from another MapSet may conflict with existing
+active doors because the database allows only one active door per room.
 
 ```bash
 npm run vec-points:dry-run -- --file="/path/to/complete-vec-mapset-export.json"
