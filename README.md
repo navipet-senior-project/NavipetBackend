@@ -161,13 +161,8 @@ Unity `origin/main`).
 
 ### Backend routing boundary
 
-The backend has **no indoor route graph, no path computation, and no step-free
-route**. It returns a destination pose only. Routing lives in Unity: a
-provisional walkable grid derived from the scanned mesh (a Unity-side
-`IndoorWalkGrid`) is searched on the device, and Unity reports
-`STEP_FREE_UNVERIFIED` rather than guessing when a step-free route is requested.
-That grid is only as complete as the scan; a missed doorway makes the route fail
-instead of producing a path.
+The backend supplies the destination pose. Unity computes indoor routes on the
+device and reports `STEP_FREE_UNVERIFIED` when a step-free route is requested.
 
 ### Unity and MultiSet localization boundary
 
@@ -199,8 +194,6 @@ active rooms. Notes:
 
 - End-to-end indoor navigation on a phone against production data was not run
   for this section; the descriptions come from reading code.
-- Unity's barometer height hint to MultiSet is documented in Unity as advisory
-  and unverified on device and server.
 - Whether production database rows match the repository migrations.
 
 ## Indoor door import (VEC)
