@@ -127,11 +127,91 @@ Missing, malformed, expired, or otherwise invalid credentials return a generic
 `401 Authentication required` response. The backend never accepts a user ID
 from request data as proof of identity.
 
+## Indoor navigation architecture
+
+Indoor navigation spans three codebases. This repository is only the data and
+credential backend; the Flutter app hands off to a Unity AR runtime that
+localizes and guides with MultiSet. This section describes the merged code on
+each side's default branch at the time of writing (backend `main`; Flutter and
+Unity `origin/main`), not the Flutter application overview or the mapping
+services described elsewhere in this README.
+
+### Responsibilities
+
+| Part | Owns | Does not do |
+| --- | --- | --- |
+| Backend (this repo) | Room destinations, active door poses (`vec_destination_points`), optional per-room Wi-Fi fingerprints, and the MultiSet token exchange. | Route planning, localization, or receiving camera frames. |
+| Flutter app | Search and place detail, the handoff request to Unity, floor confirmation and barometer evidence, token fetch. | Convert coordinates; it passes MapSet-frame poses through unchanged. |
+| Unity AR runtime | MultiSet localization (the SDK calls MultiSet directly), the on-device route and guidance HUD, optional sign OCR. | Call this backend itself; the token arrives in the Flutter request. |
+
+### Data flow
+
+1. Flutter searches campus places (`GET /autocomplete`). A VEC room's
+   `navigation.indoorDestinationId` comes from its active door point.
+2. Flutter opens `GET /places/:placeId`. When the room has an active door with a
+   heading, the response includes `indoor`: `mapCode`, `frame`
+   (`multiset-mapset`), `doorKey`, `floor`, `position` (`x`, `y`, `z`, metres)
+   and `headingDeg` (0 to <360). A door without a heading is omitted from
+   `indoor` and logged server-side.
+3. Flutter calls `POST /indoor/ar-token` (see
+   [Indoor AR token exchange](#indoor-ar-token-exchange)) and starts the Unity
+   activity with the door pose, the token, and optional floor evidence.
+4. Unity localizes against the MapSet with that token and routes to the door
+   pose. Backend, Flutter, and Unity all use one coordinate frame, so nothing
+   converts between them.
+
+### Backend routing boundary
+
+The backend has **no indoor route graph, no path computation, and no step-free
+route**. It returns a destination pose only. Routing lives in Unity: a
+provisional walkable grid derived from the scanned mesh (a Unity-side
+`IndoorWalkGrid`) is searched on the device, and Unity reports
+`STEP_FREE_UNVERIFIED` rather than guessing when a step-free route is requested.
+That grid is only as complete as the scan; a missed doorway makes the route fail
+instead of producing a path.
+
+### Unity and MultiSet localization boundary
+
+- MultiSet localizes the phone camera against the MapSet. This happens inside
+  Unity through the MultiSet SDK; the backend never sees camera frames or
+  localization results.
+- The backend only mints the short-lived Query-scoped token. MultiSet
+  credentials stay on the server and are never sent to Flutter or Unity.
+- The door poses stored here must stay in the MapSet frame that MultiSet
+  returns, or Unity's guidance will be offset. The backend does not verify this;
+  the import scripts check shape, not geometry.
+
+### Wi-Fi fingerprints (experimental)
+
+`campus_destinations.wifi_fingerprints` (room rows only, JSON array) holds
+survey scans loaded with `scripts/import-wifi-survey.mjs` (dry run by default;
+`--apply` writes). `GET /buildings/:buildingCode/wifi-fingerprints` returns
+`{ schemaVersion, building, coordinateFrame, fingerprints }` for a building's
+active rooms. Notes:
+
+- The route does **not** require a bearer token and reads through the
+  service-role client. It sends `Cache-Control: private, max-age=300`. Treat the
+  stored scans, which include access-point BSSIDs, as publicly readable.
+- Without the service-role key it returns 503.
+- The survey importer accepts floors 1 and 2 only.
+- Flutter's Wi-Fi positioning screen records and matches fingerprints on the
+  device (Android only). I found no call to this endpoint in Flutter `main`,
+  so whether any client consumes it is unverified.
+
+### Not verified
+
+- End-to-end indoor navigation on a phone against production data was not run
+  for this section; the descriptions come from reading code.
+- Unity's barometer height hint to MultiSet is documented in Unity as advisory
+  and unverified on device and server.
+- That MultiSet accepts native requests with no browser `Origin` header (see
+  the token section).
+- Whether production database rows match the repository migrations.
+
 ## Indoor door import (VEC)
 
 `public.vec_destination_points` stores VEC room door positions in the MultiSet
-MapSet frame (`MSET_XTBY7AM7ZK77`, origin = `Floor 1 2` map root, left-handed,
-+Y up, metres). The [floor-three migration](supabase/migrations/20261117205322_add_vec_floor3_points.sql)
+MapSet frame (origin = `Floor 1 2` map root, left-handed, +Y up, metres). The [floor-three migration](supabase/migrations/20261117205322_add_vec_floor3_points.sql)
 adds the floor-three rooms and doors alongside the existing lower-floor data.
 After applying the migration, use the [read-only SQL checks](supabase/tests/vec_floor3_checks.sql).
 
