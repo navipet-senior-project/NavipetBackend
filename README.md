@@ -145,13 +145,18 @@ Unity `origin/main`).
 
 ### Data flow
 
+All three API calls require a Supabase bearer session. Autocomplete and place
+detail can return VEC rooms without `SUPABASE_SERVICE_ROLE_KEY`, but their
+indoor fields require that server-side key.
+
 1. Flutter searches campus places (`GET /autocomplete`). A VEC room's
-   `navigation.indoorDestinationId` comes from its active door point.
+   `navigation.indoorDestinationId` comes from its active door point when one
+   is available.
 2. Flutter opens `GET /places/:placeId`. When the room has an active door with a
-   heading, the response includes `indoor`: `mapCode`, `frame`
-   (`multiset-mapset`), `doorKey`, `floor`, `position` (`x`, `y`, `z`, metres)
-   and `headingDeg` (0 to <360). A door without a heading is omitted from
-   `indoor` and logged server-side.
+   heading, `place.indoor` contains `mapCode`, `frame` (`multiset-mapset`),
+   `doorKey`, `floor`, `position` (`x`, `y`, `z`, metres), and `headingDeg`
+   (0 to <360). If the active door lacks a heading, the backend omits
+   `place.indoor` and logs the omission.
 3. Flutter calls `POST /indoor/ar-token` (see
    [Indoor AR token exchange](#indoor-ar-token-exchange)) and starts the Unity
    activity with the door pose, the token, and optional floor evidence.
@@ -169,8 +174,9 @@ device and reports `STEP_FREE_UNVERIFIED` when a step-free route is requested.
 - MultiSet localizes the phone camera against the MapSet. This happens inside
   Unity through the MultiSet SDK; the backend never sees camera frames or
   localization results.
-- The backend only mints the short-lived Query-scoped token. MultiSet
-  credentials stay on the server and are never sent to Flutter or Unity.
+- The backend exchanges server-side MultiSet credentials for a short-lived
+  token that inherits their scope. Configure credentials with only the Query
+  scope. The credentials stay on the server.
 - The door poses stored here must stay in the MapSet frame that MultiSet
   returns, or Unity's guidance will be offset. The backend does not verify this;
   the import scripts check shape, not geometry.
@@ -239,9 +245,8 @@ The Supabase integration separates capabilities by trust level:
   and token-claim verification.
 - A user-scoped client forwards the verified access token to Supabase so
   database operations execute as that user and remain subject to RLS.
-- The optional admin client uses the service-role key only for explicit
-  server-side administrative work. It is not used for normal user requests or
-  token verification.
+- The optional admin client uses the service-role key for explicit server-side
+  operations, including indoor door lookups.
 
 Supabase Auth stores credentials. Application tables reference
 `auth.users` by UUID and store only application-owned data. RLS policies in
@@ -290,9 +295,9 @@ MultiSet documents a 30-minute lifetime and Query permission for localization:
 [authentication](https://docs.multiset.ai/fundamentals/rest-api-docs/authentication).
 Its [CORS guide](https://docs.multiset.ai/fundamentals/credentials/configuring-allowed-domains-cors)
 describes browser origins, without specifying rejection of native requests that
-have no Origin header. Verify this on a phone during Unity integration. The SDK
-docs describe internal exchange/refresh using credentials; accepting a supplied
-token and renewing it belongs to that later integration. This backend never
+have no Origin header. Verify this on a phone during Unity integration. Flutter
+passes the backend-issued token to Unity at startup. Token renewal during an
+active Unity session remains a separate integration task. This backend never
 receives or localizes camera frames.
 
 ## Pet gems and costumes
