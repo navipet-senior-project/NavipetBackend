@@ -141,7 +141,7 @@ Unity `origin/main`).
 | --- | --- | --- |
 | Backend (this repo) | Room destinations, active door poses (`vec_destination_points`), optional per-room Wi-Fi fingerprints, and the MultiSet token exchange. | Route planning, localization, or receiving camera frames. |
 | Flutter app | Search and place detail, the handoff request to Unity, floor confirmation and barometer evidence, token fetch. | Convert coordinates; it passes MapSet-frame poses through unchanged. |
-| Unity AR runtime | MultiSet localization (the SDK calls MultiSet directly), the on-device route and guidance HUD, optional sign OCR. | Call this backend itself; the token arrives in the Flutter request. |
+| Unity AR runtime | MultiSet localization (the SDK calls MultiSet directly), the on-device route and guidance HUD. | Call this backend itself; the token arrives in the Flutter request. |
 
 ### Data flow
 
@@ -192,9 +192,8 @@ active rooms. Notes:
   service-role client. It sends `Cache-Control: private, max-age=300`. Treat the
   stored scans, which include access-point BSSIDs, as publicly readable.
 - Without the service-role key it returns 503.
-- Flutter's Wi-Fi positioning screen records and matches fingerprints on the
-  device (Android only). I found no call to this endpoint in Flutter `main`,
-  so whether any client consumes it is unverified.
+- The review found no call to this endpoint in Flutter `main`, so client
+  consumption remains unverified.
 
 ### Not verified
 
@@ -202,8 +201,6 @@ active rooms. Notes:
   for this section; the descriptions come from reading code.
 - Unity's barometer height hint to MultiSet is documented in Unity as advisory
   and unverified on device and server.
-- That MultiSet accepts native requests with no browser `Origin` header (see
-  the token section).
 - Whether production database rows match the repository migrations.
 
 ## Indoor door import (VEC)
