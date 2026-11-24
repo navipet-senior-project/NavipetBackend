@@ -214,10 +214,6 @@ Supply the path to a complete Unity export in the MultiSet MapSet frame using
 [contract v2](scripts/lib/vec-points-import.ts). Include the floor-three doors.
 The legacy export covering only floors 1–2 is stale for the expanded MapSet.
 
-Check that the export's `map.code` matches the MapSet above before running either
-command. Applying an export from another MapSet may conflict with existing
-active doors because the database allows only one active door per room.
-
 ```bash
 npm run vec-points:dry-run -- --file="/path/to/complete-vec-mapset-export.json"
 npm run vec-points:apply -- --file="/path/to/complete-vec-mapset-export.json"
