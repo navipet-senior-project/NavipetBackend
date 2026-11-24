@@ -157,12 +157,13 @@ indoor fields require that server-side key.
    `doorKey`, `floor`, `position` (`x`, `y`, `z`, metres), and `headingDeg`
    (0 to <360). If the active door lacks a heading, the backend omits
    `place.indoor` and logs the omission.
-3. Flutter calls `POST /indoor/ar-token` (see
+3. Flutter continues with indoor navigation only if place detail returns
+   `place.indoor`. It then calls `POST /indoor/ar-token` (see
    [Indoor AR token exchange](#indoor-ar-token-exchange)) and starts the Unity
    activity with the door pose, the token, and optional floor evidence.
-4. Unity localizes against the MapSet with that token and routes to the door
-   pose. Backend, Flutter, and Unity all use one coordinate frame, so nothing
-   converts between them.
+4. After the handoff, Unity localizes against the MapSet with that token and
+   routes to the door pose. Backend, Flutter, and Unity all use one coordinate
+   frame, so nothing converts between them.
 
 ### Backend routing boundary
 
