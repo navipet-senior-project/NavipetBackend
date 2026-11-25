@@ -5,7 +5,8 @@
 NaviPet Backend is the TypeScript API for the NaviPet indoor/outdoor campus navigation
 application. It provides the trusted server boundary between the Flutter client
 and Supabase for authenticated user features such as profiles, class schedules,
-task progress, and future navigation data.
+and task progress. It also serves campus place data and supports
+[indoor navigation](#indoor-navigation-architecture).
 
 The service does not manage passwords or create a separate identity system.
 Supabase Auth owns user identity, while this backend validates access tokens,
@@ -127,6 +128,82 @@ Missing, malformed, expired, or otherwise invalid credentials return a generic
 `401 Authentication required` response. The backend never accepts a user ID
 from request data as proof of identity.
 
+## Indoor navigation architecture
+
+Indoor navigation spans three codebases. This repository is only the data and
+credential backend; the Flutter app hands off to a Unity AR runtime that
+localizes and guides with MultiSet. This section describes the merged code on
+each side's default branch at the time of writing (backend `main`; Flutter and
+Unity `origin/main`).
+
+### Responsibilities
+
+| Part | Owns | Does not do |
+| --- | --- | --- |
+| Backend (this repo) | Room destinations, active door poses (`vec_destination_points`), optional per-room Wi-Fi fingerprints, and the MultiSet token exchange. | Route planning, localization, or receiving camera frames. |
+| Flutter app | Search and place detail, the handoff request to Unity, floor confirmation and barometer evidence, token fetch. | Convert coordinates; it passes MapSet-frame poses through unchanged. |
+| Unity AR runtime | MultiSet localization (the SDK calls MultiSet directly), the on-device route and guidance HUD. | Call this backend itself; the token arrives in the Flutter request. |
+
+### Data flow
+
+All three API calls require a Supabase bearer session. Autocomplete and place
+detail can return VEC rooms without `SUPABASE_SERVICE_ROLE_KEY`, but their
+indoor fields require that server-side key.
+
+1. Flutter searches campus places (`GET /autocomplete`). A VEC room's
+   `navigation.indoorDestinationId` comes from its active door point when one
+   is available.
+2. Flutter opens `GET /places/:placeId`. When the room has an active door with a
+   heading, `place.indoor` contains the door pose in the MapSet frame. See
+   [Swagger UI](#local-api-testing-with-swagger-ui) for the response schema. If
+   the active door lacks a heading, the backend omits `place.indoor` and logs
+   the omission.
+3. Flutter continues with indoor navigation only if place detail returns
+   `place.indoor`. It then calls `POST /indoor/ar-token` (see
+   [Indoor AR token exchange](#indoor-ar-token-exchange)) and starts the Unity
+   activity with the door pose, the token, and optional floor evidence.
+4. After the handoff, Unity localizes against the MapSet with that token and
+   routes to the door pose. Backend, Flutter, and Unity all use one coordinate
+   frame, so nothing converts between them.
+
+### Backend routing boundary
+
+The backend supplies the destination pose. Unity computes indoor routes on the
+device and reports `STEP_FREE_UNVERIFIED` when a step-free route is requested.
+
+### Unity and MultiSet localization boundary
+
+- MultiSet localizes the phone camera against the MapSet. This happens inside
+  Unity through the MultiSet SDK; the backend never sees camera frames or
+  localization results.
+- The backend issues the short-lived token through the
+  [Indoor AR token exchange](#indoor-ar-token-exchange), which covers credential
+  scope and setup.
+- The door poses stored here must stay in the MapSet frame that MultiSet
+  returns, or Unity's guidance will be offset. The backend does not verify this;
+  the import scripts check shape, not geometry.
+
+### Wi-Fi fingerprints (experimental)
+
+`campus_destinations.wifi_fingerprints` (room rows only, JSON array) holds
+survey scans loaded by the [Wi-Fi survey importer](scripts/import-wifi-survey.mjs).
+`GET /buildings/:buildingCode/wifi-fingerprints` returns
+`{ schemaVersion, building, coordinateFrame, fingerprints }` for a building's
+active rooms. Notes:
+
+- The route does **not** require a bearer token and reads through the
+  service-role client. It sends `Cache-Control: private, max-age=300`. Treat the
+  stored scans, which include access-point BSSIDs, as publicly readable.
+- Without the service-role key it returns 503.
+- The review found no call to this endpoint in Flutter `main`, so client
+  consumption remains unverified.
+
+### Not verified
+
+- End-to-end indoor navigation on a phone against production data was not run
+  for this section; the descriptions come from reading code.
+- Whether production database rows match the repository migrations.
+
 ## Indoor door import (VEC)
 
 `public.vec_destination_points` stores VEC room door positions in the MultiSet
@@ -155,8 +232,7 @@ mismatches. Apply also rejects floor mismatches shown in the dry-run. It sets
 `active = false` on doors in the same MapSet whose version differs from the
 export or whose key is omitted from the matched doors.
 
-The API takes a VEC room's `navigation.indoorDestinationId` from its active
-door point. Place detail includes the indoor pose when the door has a heading.
+See [Data flow](#data-flow) for how the API uses active door points.
 Do not set `multiset_destination_id` for VEC rooms in `data/csulb-campus-places.csv`.
 
 ## Supabase security
@@ -167,9 +243,8 @@ The Supabase integration separates capabilities by trust level:
   and token-claim verification.
 - A user-scoped client forwards the verified access token to Supabase so
   database operations execute as that user and remain subject to RLS.
-- The optional admin client uses the service-role key only for explicit
-  server-side administrative work. It is not used for normal user requests or
-  token verification.
+- The optional admin client uses the service-role key for explicit server-side
+  operations, including indoor door lookups.
 
 Supabase Auth stores credentials. Application tables reference
 `auth.users` by UUID and store only application-owned data. RLS policies in
@@ -218,10 +293,8 @@ MultiSet documents a 30-minute lifetime and Query permission for localization:
 [authentication](https://docs.multiset.ai/fundamentals/rest-api-docs/authentication).
 Its [CORS guide](https://docs.multiset.ai/fundamentals/credentials/configuring-allowed-domains-cors)
 describes browser origins, without specifying rejection of native requests that
-have no Origin header. Verify this on a phone during Unity integration. The SDK
-docs describe internal exchange/refresh using credentials; accepting a supplied
-token and renewing it belongs to that later integration. This backend never
-receives or localizes camera frames.
+have no Origin header. Verify this on a phone during Unity integration. Token
+renewal during an active Unity session remains a separate integration task.
 
 ## Pet gems and costumes
 
