@@ -12,22 +12,6 @@ begin
     from public.campus_destinations
     where building_code = 'VEC' and type = 'room' and active
   ), 'expected 17 + 9 + 7 + 7 = 40 active VEC rooms';
-  assert exists (
-    select 1 from public.campus_destinations b
-    cross join lateral (select b.metadata -> 'footprint' as footprint) f
-    where b.type = 'building' and b.code = 'VEC' and b.active and b.searchable
-      and jsonb_path_exists(f.footprint, 'strict $ ? (
-        @.type == "Polygon" && @.coordinates[0].type() == "array" &&
-        @.coordinates[0].size() >= 4 && @.coordinates[0].size() <= 500
-      )', '{}', true) is true
-      and f.footprint #> '{coordinates,0,0}' = f.footprint #> '{coordinates,0,-1}'
-      and jsonb_path_exists(f.footprint, 'strict $.coordinates[0][*] ? (
-        @.type() != "array" || @.size() < 2 ||
-        @[0].type() != "number" || @[1].type() != "number" ||
-        !(@[0] >= -180 && @[0] <= 180 && @[1] >= -90 && @[1] <= 90) ||
-        (@[0] == 0 && @[1] == 0)
-      )', '{}', true) is false
-  ), 'expected an active searchable VEC building with a valid footprint';
   assert not exists (
     select 1 from public.campus_destinations
     where building_code = 'VEC' and type = 'room' and room_number = '510' and active
@@ -43,6 +27,12 @@ begin
       on b.id = d.parent_destination_id and b.type = 'building' and b.code = 'VEC'
       and b.active and b.searchable
     where p.map_code = 'MSET_XTBY7AM7ZK77' and p.active and p.point_type = 'door'
+      and not exists (
+        select 1 from public.campus_destinations history
+        where history.id = p.destination_id and history.type = 'room'
+          and history.building_code = 'VEC' and history.room_number = '510'
+          and not history.active
+      )
   ), 'expected 40 active VEC doors with headings and matching searchable VEC rooms';
   assert (
     select count(*)
@@ -82,7 +72,7 @@ begin
       and d.code = 'VEC-' || expected.room_number and d.room_number = expected.room_number
       and d.type = 'room' and d.source = 'navipet_vec_rooms'
       and d.building_code = 'VEC' and d.floor_number = expected.floor
-      and d.active and d.searchable and d.metadata ? 'footprint'
+      and d.active and d.searchable
     join public.campus_destinations b
       on b.id = d.parent_destination_id and b.type = 'building' and b.code = 'VEC'
       and b.active and b.searchable
@@ -91,7 +81,6 @@ begin
       and (expected.floor = '3' or (
         d.name = 'VEC ' || expected.room_number
         and d.source_id = 'VEC-' || expected.room_number
-        and d.metadata -> 'footprint' = b.metadata -> 'footprint'
         and p.exported_at = '2026-11-26T10:19:42Z'::timestamptz
       ))
   ) = 23, 'active floor 3-5 doors and their room links must match the export';

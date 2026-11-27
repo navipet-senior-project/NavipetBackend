@@ -213,11 +213,11 @@ adds the floor-three rooms and doors alongside the existing lower-floor data.
 The [floors four and five migration](supabase/migrations/20261126120000_add_vec_floor45_points.sql)
 adds those rooms and doors and moves the VEC330 and VEC331 doors to their
 confirmed positions. This rollout is complete once you apply the migration and
-pass the [read-only SQL checks](supabase/tests/vec_floor45_checks.sql).
+verify its original snapshot with the
+[read-only SQL checks](supabase/tests/vec_floor45_checks.sql).
 A follow-up import is optional.
 
-There is no automated rollback. Plan any reversal by hand using only rows
-verified to have been created by this migration. Preserve pre-existing rows.
+There is no automated rollback.
 
 The points table holds doors only. VECelev5A and VECelev5B belong to floor 5.
 Correct their `floor_4` labels in
@@ -247,6 +247,10 @@ before applying.
 ```bash
 npm run vec-points:apply -- --file="/path/to/complete-vec-mapset-export.json"
 ```
+
+The rollout SQL checks expect the original floor 4–5 export timestamp. A
+later import that refreshes it requires separate verification of the imported
+state.
 
 Without `--file`, both commands look for a local export at `data/vec-points.json`.
 

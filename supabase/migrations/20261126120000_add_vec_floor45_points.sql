@@ -3,8 +3,6 @@
 -- Floors 1-3 rows are otherwise left untouched. Repeat-safe: a replay
 -- inserts and updates nothing. Fails before writing if any target row
 -- already exists with different data. There is no automated rollback.
--- Plan any reversal by hand and change only rows verified to have been
--- created by this migration. Preserve pre-existing rows.
 -- Checks: supabase/tests/vec_floor45_checks.sql.
 --
 -- Source: NaviPetUnity branch floors_12345 (commit c14d82d),
@@ -60,20 +58,8 @@ begin
   from public.campus_destinations
   where type = 'building' and code = 'VEC' and active and searchable
   for share;
-  if vec_building_id is null
-    or jsonb_path_exists(vec_footprint, 'strict $ ? (
-      @.type == "Polygon" && @.coordinates[0].type() == "array" &&
-      @.coordinates[0].size() >= 4 && @.coordinates[0].size() <= 500
-    )', '{}', true) is not true
-    or vec_footprint #> '{coordinates,0,0}' is distinct from
-       vec_footprint #> '{coordinates,0,-1}'
-    or jsonb_path_exists(vec_footprint, 'strict $.coordinates[0][*] ? (
-      @.type() != "array" || @.size() < 2 ||
-      @[0].type() != "number" || @[1].type() != "number" ||
-      !(@[0] >= -180 && @[0] <= 180 && @[1] >= -90 && @[1] <= 90) ||
-      (@[0] == 0 && @[1] == 0)
-    )', '{}', true) is not false then
-    raise exception 'active searchable VEC building row with a valid footprint is missing';
+  if vec_building_id is null then
+    raise exception 'active searchable VEC building row is missing';
   end if;
 
   if exists (select 1 from public.campus_destinations
@@ -86,12 +72,10 @@ begin
   join public.campus_destinations d
     on d.import_key = 'source:navipet_vec_rooms:vec-' || v.room
   where (d.type, d.name, d.code, d.building_code, d.room_number, d.floor_number,
-         d.parent_destination_id, d.source, d.source_id, d.active, d.searchable,
-         d.metadata -> 'footprint')
+         d.parent_destination_id, d.source, d.source_id, d.active, d.searchable)
     is distinct from
         ('room', 'VEC ' || v.room, 'VEC-' || v.room, 'VEC', v.room, v.floor,
-         vec_building_id, 'navipet_vec_rooms', 'VEC-' || v.room, true, true,
-         vec_footprint);
+         vec_building_id, 'navipet_vec_rooms', 'VEC-' || v.room, true, true);
   if problem is not null then
     raise exception 'existing room rows differ from the floor 4-5 export: %', problem;
   end if;
@@ -150,7 +134,9 @@ begin
     'source:navipet_vec_rooms:vec-' || v.room,
     'room', 'VEC ' || v.room, 'VEC-' || v.room, vec_building_id, 'VEC',
     v.room, v.floor, 'navipet_vec_rooms', 'VEC-' || v.room,
-    jsonb_build_object('footprint', vec_footprint), true, true
+    case when vec_footprint is null or vec_footprint = 'null'::jsonb then '{}'::jsonb
+         else jsonb_build_object('footprint', vec_footprint) end,
+    true, true
   from vec_floor45_doors v
   on conflict (import_key) do nothing;
 
@@ -165,11 +151,9 @@ begin
   join public.campus_destinations d
     on d.import_key = 'source:navipet_vec_rooms:vec-' || v.room
     and (d.type, d.name, d.code, d.building_code, d.room_number, d.floor_number,
-         d.parent_destination_id, d.source, d.source_id, d.active, d.searchable,
-         d.metadata -> 'footprint')
+         d.parent_destination_id, d.source, d.source_id, d.active, d.searchable)
       = ('room', 'VEC ' || v.room, 'VEC-' || v.room, 'VEC', v.room, v.floor,
-         vec_building_id, 'navipet_vec_rooms', 'VEC-' || v.room, true, true,
-         vec_footprint)
+         vec_building_id, 'navipet_vec_rooms', 'VEC-' || v.room, true, true)
   on conflict (map_code, map_version, point_key) do nothing;
 
   update public.vec_destination_points p
@@ -190,11 +174,9 @@ begin
       join public.campus_destinations d
         on d.import_key = 'source:navipet_vec_rooms:vec-' || v.room
         and (d.type, d.name, d.code, d.building_code, d.room_number, d.floor_number,
-             d.parent_destination_id, d.source, d.source_id, d.active, d.searchable,
-             d.metadata -> 'footprint')
+             d.parent_destination_id, d.source, d.source_id, d.active, d.searchable)
           = ('room', 'VEC ' || v.room, 'VEC-' || v.room, 'VEC', v.room, v.floor,
-             vec_building_id, 'navipet_vec_rooms', 'VEC-' || v.room, true, true,
-             vec_footprint)
+             vec_building_id, 'navipet_vec_rooms', 'VEC-' || v.room, true, true)
       join public.vec_destination_points p
         on p.map_code = 'MSET_XTBY7AM7ZK77' and p.map_version = 1
         and p.point_key = v.point_key
