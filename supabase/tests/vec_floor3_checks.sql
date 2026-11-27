@@ -1,5 +1,7 @@
 -- Run in Supabase Dashboard > SQL Editor AFTER 20261117205322_add_vec_floor3_points is applied.
 -- Read-only. Success: NOTICE "vec floor 3 checks passed" and no error.
+-- After 20261126120000_add_vec_floor45_points, use vec_floor45_checks.sql instead:
+-- that migration moves VEC330 and VEC331, so this file's last check fails.
 
 do $$
 begin

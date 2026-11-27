@@ -210,16 +210,47 @@ active rooms. Notes:
 MapSet frame (`MSET_XTBY7AM7ZK77`, origin = `Floor 1 2` map root, left-handed,
 +Y up, metres). The [floor-three migration](supabase/migrations/20261117205322_add_vec_floor3_points.sql)
 adds the floor-three rooms and doors alongside the existing lower-floor data.
-After applying the migration, use the [read-only SQL checks](supabase/tests/vec_floor3_checks.sql).
+The [floors four and five migration](supabase/migrations/20261126120000_add_vec_floor45_points.sql)
+adds those rooms and doors and moves the VEC330 and VEC331 doors to their
+confirmed positions. This rollout is complete once you apply the migration and
+verify its original snapshot with the
+[read-only SQL checks](supabase/tests/vec_floor45_checks.sql).
+A follow-up import is optional.
 
-Supply the path to a complete Unity export in the MultiSet MapSet frame using
-[contract v2](scripts/lib/vec-points-import.ts). Include the floor-three doors.
-The legacy export covering only floors 1–2 is stale for the expanded MapSet.
+There is no automated rollback.
+
+The points table holds doors only. VECelev5A and VECelev5B belong to floor 5.
+Correct their `floor_4` labels in
+[NaviPetUnity's `vec_floors12345.json`](https://github.com/navipet-senior-project/NaviPetUnity/blob/c14d82d/Assets/IndoorNavigation/Data/vec_floors12345.json).
+
+For a later import, supply a complete Unity export in the MultiSet MapSet frame
+using [contract v2](scripts/lib/vec-points-import.ts). Include the doors for floors 1–5.
+Exports covering only floors 1–2 or 1–3 are stale for the expanded MapSet.
+Preserve the stored floor 1–3 door poses, including measured floor-3 Y `6.04`
+and the confirmed X/Z positions for VEC330 (`19.1224`, `20.6953`) and VEC331
+(`22.0127`, `20.4243`).
 
 ```bash
 npm run vec-points:dry-run -- --file="/path/to/complete-vec-mapset-export.json"
+```
+
+Contract v2 uses one `exportedAt` timestamp for every door. The importer
+reports timestamp-only differences as updates, so a pose-identical export can
+still list floor 1–3 updates. The dry-run lists updated door keys. Compare each
+listed floor 1–3 door with its stored row and confirm that only the timestamp
+differs. The poses must match,
+including floor-3 Y `6.04` and the confirmed VEC330 and VEC331 X/Z positions
+above. Stop if you cannot confirm this or if the dry-run proposes any floor
+1–3 insert or deactivation. Resolve the discrepancy and rerun the dry-run
+before applying.
+
+```bash
 npm run vec-points:apply -- --file="/path/to/complete-vec-mapset-export.json"
 ```
+
+The rollout SQL checks expect the original floor 4–5 export timestamp. A
+later import that refreshes it requires separate verification of the imported
+state.
 
 Without `--file`, both commands look for a local export at `data/vec-points.json`.
 
