@@ -210,11 +210,16 @@ active rooms. Notes:
 MapSet frame (`MSET_XTBY7AM7ZK77`, origin = `Floor 1 2` map root, left-handed,
 +Y up, metres). The [floor-three migration](supabase/migrations/20261117205322_add_vec_floor3_points.sql)
 adds the floor-three rooms and doors alongside the existing lower-floor data.
-After applying the migration, use the [read-only SQL checks](supabase/tests/vec_floor3_checks.sql).
+The [floors four and five migration](supabase/migrations/20261126120000_add_vec_floor45_points.sql)
+adds those rooms and doors and moves the VEC330 and VEC331 doors to their
+confirmed positions. After applying it, use the
+[read-only SQL checks](supabase/tests/vec_floor45_checks.sql); the
+[rollback script](supabase/rollbacks/20261126120000_add_vec_floor45_points_down.sql)
+deactivates what it added and restores VEC330 and VEC331.
 
 Supply the path to a complete Unity export in the MultiSet MapSet frame using
-[contract v2](scripts/lib/vec-points-import.ts). Include the floor-three doors.
-The legacy export covering only floors 1–2 is stale for the expanded MapSet.
+[contract v2](scripts/lib/vec-points-import.ts). Include the doors for floors 1–5.
+Exports covering only floors 1–2 or 1–3 are stale for the expanded MapSet.
 
 ```bash
 npm run vec-points:dry-run -- --file="/path/to/complete-vec-mapset-export.json"
