@@ -213,9 +213,13 @@ adds the floor-three rooms and doors alongside the existing lower-floor data.
 The [floors four and five migration](supabase/migrations/20261126120000_add_vec_floor45_points.sql)
 adds those rooms and doors and moves the VEC330 and VEC331 doors to their
 confirmed positions. After applying it, use the
-[read-only SQL checks](supabase/tests/vec_floor45_checks.sql); the
-[rollback script](supabase/rollbacks/20261126120000_add_vec_floor45_points_down.sql)
-deactivates what it added and restores VEC330 and VEC331.
+[read-only SQL checks](supabase/tests/vec_floor45_checks.sql). There is no
+automated rollback. Plan any reversal by hand using only rows verified to have
+been created by this migration. Preserve pre-existing rows.
+
+The points table holds doors only. VECelev5A and VECelev5B belong to floor 5.
+Correct their `floor_4` labels in
+[NaviPetUnity's `vec_floors12345.json`](https://github.com/navipet-senior-project/NaviPetUnity/blob/c14d82d/Assets/IndoorNavigation/Data/vec_floors12345.json).
 
 Supply the path to a complete Unity export in the MultiSet MapSet frame using
 [contract v2](scripts/lib/vec-points-import.ts). Include the doors for floors 1–5.
