@@ -30,8 +30,8 @@ begin
   ), 'expected an active searchable VEC building with a valid footprint';
   assert not exists (
     select 1 from public.campus_destinations
-    where building_code = 'VEC' and type = 'room' and room_number = '510'
-  ), 'room 501 replaces 510; no VEC 510 room may exist';
+    where building_code = 'VEC' and type = 'room' and room_number = '510' and active
+  ), 'room 501 replaces 510; no active VEC 510 room may exist';
   assert (
     select count(*) = 40 and count(b.id) = 40 and count(p.heading_deg) = 40
     from public.vec_destination_points p

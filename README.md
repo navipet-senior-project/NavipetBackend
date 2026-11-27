@@ -224,9 +224,18 @@ Correct their `floor_4` labels in
 Supply the path to a complete Unity export in the MultiSet MapSet frame using
 [contract v2](scripts/lib/vec-points-import.ts). Include the doors for floors 1–5.
 Exports covering only floors 1–2 or 1–3 are stale for the expanded MapSet.
+Preserve the stored floor 1–3 door poses, including measured floor-3 Y `6.04`
+and the confirmed X/Z positions for VEC330 (`19.1224`, `20.6953`) and VEC331
+(`22.0127`, `20.4243`).
 
 ```bash
 npm run vec-points:dry-run -- --file="/path/to/complete-vec-mapset-export.json"
+```
+
+Stop if the dry-run proposes any insert, update, or deactivation for a floor 1–3
+door. Resolve the discrepancy and rerun the dry-run before applying.
+
+```bash
 npm run vec-points:apply -- --file="/path/to/complete-vec-mapset-export.json"
 ```
 

@@ -11,7 +11,8 @@
 -- Assets/IndoorNavigation/Data/vec_floors12345.json, door objects only
 -- (vec_destination_points holds doors only). VECelev5A and VECelev5B
 -- belong to floor 5. Correct their floor_4 labels in the Unity file above.
--- Room 501 is VEC501 in that file; no VEC 510 row exists or is created.
+-- VEC501 replaces VEC 510. An active VEC 510 room blocks the migration.
+-- Inactive VEC 510 history is preserved.
 -- XZ and heading use the floor-3 transform, which reproduces all 26
 -- existing floor 1-3 rows to 0.0001 m: rotate -5.3563 deg about Y,
 -- x' = 0.99563 x + 0.09335 z + 0.2794, z' = -0.09335 x + 0.99563 z + 0.8376,
@@ -76,8 +77,8 @@ begin
   end if;
 
   if exists (select 1 from public.campus_destinations
-             where building_code = 'VEC' and type = 'room' and room_number = '510') then
-    raise exception 'a VEC 510 room exists; room 501 replaces it, inspect before applying';
+             where building_code = 'VEC' and type = 'room' and room_number = '510' and active) then
+    raise exception 'an active VEC 510 room exists; resolve it before adding VEC 501';
   end if;
 
   select string_agg(d.import_key, ', ') into problem
